@@ -1,0 +1,18 @@
+[package]
+name = "auth-git2"
+version = "0.0.0"
+description = "Authentication for `git2`"
+license = "BSD-2-Clause"
+authors = ["Maarten de Vries <maarten@de-vri.es>"]
+repository = "https://github.com/de-vri-es/auth-git2-rs"
+documentation = "https://docs.rs/auth-git2"
+keywords = ["git", "auth", "git2", "authentication", "ssh"]
+categories = ["authentication"]
+
+edition = "2021"
+publish = ["crates-io"]
+
+[dependencies]
+dirs = "5.0.1"
+git2 = { version = "0.17.2", default-features = false }
+terminal-prompt = "0.2.1"

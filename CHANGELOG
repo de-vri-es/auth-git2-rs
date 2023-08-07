@@ -1,0 +1,2 @@
+# Unreleased
+- [minor][add] Add `GitAuthenticator` struct for authentication with `git2`.
