@@ -1,4 +1,4 @@
-# git2-auth
+# auth-git2
 
 Easy authentication for [`git2`].
 
@@ -20,7 +20,7 @@ You can run any git operation that requires authentication using the [`GitAuthen
 
 ## Example: Clone a repository with authentication
 ```rust
-use git2_auth::GitAuthenticator;
+use auth_git2::GitAuthenticator;
 use std::path::Path;
 
 let git_config = git2::Config::open_default()?;
@@ -33,12 +33,12 @@ let repo = GitAuthenticator::default()
         let mut repo_builder = git2::build::RepoBuilder::new();
         repo_builder.fetch_options(fetch_options);
 
-        let url = "https://github.com/de-vri-es/git2-auth-rs";
-        let path = Path::new("/tmp/git2-auth-rs");
+        let url = "https://github.com/de-vri-es/auth-git2-rs";
+        let path = Path::new("/tmp/auth-git2-rs");
         repo_builder.clone(url, path)
     })?;
 ```
 
 [`git2`]: https://docs.rs/git2
-[`GitAuthenticator`]: https://docs.rs/git2-auth/latest/git2_auth/struct.GitAuthenticator.html
-[`GitAuthenticator::run_operation()`]: https://docs.rs/git2-auth/latest/git2_auth/struct.GitAuthenticator.html#method.run_operation
+[`GitAuthenticator`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html
+[`GitAuthenticator::run_operation()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.run_operation

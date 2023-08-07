@@ -19,7 +19,7 @@
 //! # Example: Clone a repository with authentication
 //! ```no_run
 //! # fn main() -> Result<(), git2::Error> {
-//! use git2_auth::GitAuthenticator;
+//! use auth_git2::GitAuthenticator;
 //! use std::path::Path;
 //!
 //! let git_config = git2::Config::open_default()?;
@@ -78,7 +78,7 @@ impl GitAuthenticator {
 	///
 	/// This is equavalent to:
 	/// ```
-	/// # use git2_auth::GitAuthenticator;
+	/// # use auth_git2::GitAuthenticator;
 	/// GitAuthenticator::new_empty()
 	///     .try_cred_helper(true)
 	///     .try_password_prompt(3)
@@ -222,7 +222,7 @@ impl GitAuthenticator {
 	/// # Example: Fetch from a remote with authentication
 	/// ```no_run
 	/// # fn foo(repo: &mut git2::Repository) -> Result<(), git2::Error> {
-	/// use git2_auth::GitAuthenticator;
+	/// use auth_git2::GitAuthenticator;
 	///
 	/// let git_config = repo.config()?;
 	/// let mut remote = repo.find_remote("origin")?;
