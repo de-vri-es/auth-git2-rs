@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.2.0 - 2023-08-08
 - [remove][major] Remove `GitAuthenticator::run_operation()`.
 - [change][major] Support only one username per domain name.
 - [change][major] Support only one set of plaintext credentials per domain name.
