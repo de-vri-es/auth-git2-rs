@@ -14,7 +14,8 @@ Alternatively, you can use a utility function like [`GitAuthenticator::clone()`]
 
 * Minimal dependency tree!
 * Query the SSH agent.
-* Get unencrypted SSH keys from files.
+* Get SSH keys from files.
+* Prompt for SSH key passwords if needed (for OpenSSH private keys).
 * Query the git credential helper.
 * Use provided plain username + password.
 * Prompt the user for username + password on the terminal.

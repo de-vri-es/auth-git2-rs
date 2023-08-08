@@ -12,7 +12,8 @@
 //!
 //! * Minimal dependency tree!
 //! * Query the SSH agent.
-//! * Get unencrypted SSH keys from files.
+//! * Get SSH keys from files.
+//! * Prompt for SSH key passwords if needed (for OpenSSH private keys).
 //! * Query the git credential helper.
 //! * Use provided plain username + password.
 //! * Prompt the user for username + password on the terminal.
@@ -46,6 +47,9 @@
 use std::collections::BTreeMap;
 use std::path::{PathBuf, Path};
 use std::io::Write;
+
+mod base64_decode;
+mod ssh_key;
 
 #[cfg(feature = "log")]
 mod log {
@@ -94,6 +98,9 @@ pub struct GitAuthenticator {
 
 	/// SSH keys to use from file.
 	ssh_keys: Vec<PrivateKeyFile>,
+
+	/// Prompt for passwords for encrypted SSH keys.
+	prompt_ssh_key_password: bool,
 }
 
 impl Default for GitAuthenticator {
@@ -114,6 +121,7 @@ impl GitAuthenticator {
 	///     .add_default_username()
 	///     .try_ssh_agent(true)
 	///     .add_default_ssh_keys()
+	///     .prompt_ssh_key_password(true)
 	/// # ;
 	/// ```
 	pub fn new() -> Self {
@@ -123,6 +131,7 @@ impl GitAuthenticator {
 			.add_default_username()
 			.try_ssh_agent(true)
 			.add_default_ssh_keys()
+			.prompt_ssh_key_password(true)
 	}
 
 	/// Create a new authenticator with all authentication options disabled.
@@ -134,6 +143,7 @@ impl GitAuthenticator {
 			try_password_prompt: 0,
 			usernames: BTreeMap::new(),
 			ssh_keys: Vec::new(),
+			prompt_ssh_key_password: false,
 		}
 	}
 
@@ -201,14 +211,21 @@ impl GitAuthenticator {
 	///
 	/// The key will be read from disk by `git2`, so it must still exist when the authentication is performed.
 	///
+	/// You can provide a password for decryption of the private key.
+	/// If no password is provided and the `Self::prompt_ssh_key_password()` is enabled,
+	/// a password prompt will be shown on the terminal if needed to ask for the encryption key.
+	/// Note that we currently only support the `OpenSSH` private key format for detecting that a key is encrypted.
+	///
 	/// A matching `.pub` file will also be read if it exists.
 	/// For example, if you add the private key `"foo/my_ssh_id"`,
 	/// then `"foo/my_ssh_id.pub"` will be used too, if it exists.
-	pub fn add_ssh_key_from_file(mut self, private_key: PathBuf) -> Self {
+	pub fn add_ssh_key_from_file(mut self, private_key: PathBuf, password: impl Into<Option<String>>) -> Self {
 		let public_key = get_pub_key_path(&private_key);
+		let password = password.into();
 		self.ssh_keys.push(PrivateKeyFile {
 			private_key,
 			public_key,
+			password,
 		});
 		self
 	}
@@ -243,9 +260,15 @@ impl GitAuthenticator {
 			if !private_key.is_file() {
 				continue;
 			}
-			self = self.add_ssh_key_from_file(private_key);
+			self = self.add_ssh_key_from_file(private_key, None);
 		}
 
+		self
+	}
+
+	/// Prompt for passwords for encrypted SSH keys if needed.
+	pub fn prompt_ssh_key_password(mut self, enable: bool) -> Self {
+		self.prompt_ssh_key_password = enable;
 		self
 	}
 
@@ -393,7 +416,7 @@ fn make_credentials_callback<'a>(
 				#[allow(clippy::while_let_on_iterator)] // Incorrect lint: we're not consuming the iterator.
 				while let Some(key) = ssh_keys.next() {
 					debug!("credentials_callback: trying ssh key, username: {username:?}, private key: {:?}", key.private_key);
-					match key.to_credentials(username) {
+					match key.to_credentials(username, authenticator.prompt_ssh_key_password) {
 						Ok(x) => return Ok(x),
 						Err(e) => debug!("credentials_callback: failed to use SSH key from file {:?}: {e}", key.private_key),
 					}
@@ -446,12 +469,31 @@ fn make_credentials_callback<'a>(
 struct PrivateKeyFile {
 	private_key: PathBuf,
 	public_key: Option<PathBuf>,
+	password: Option<String>,
 }
 
 impl PrivateKeyFile {
-	fn to_credentials(&self, username: &str) -> Result<git2::Cred, git2::Error> {
-		// TODO: determine if we need to prompt for a password.
-		git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, None)
+	fn to_credentials(&self, username: &str, prompt: bool) -> Result<git2::Cred, git2::Error> {
+		if let Some(password) = &self.password {
+			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, Some(password))
+		} else if !prompt {
+			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, None)
+		} else {
+			let password = match ssh_key::analyze_ssh_key_file(&self.private_key) {
+				Err(e) => {
+					warn!("Failed to analyze SSH key: {}: {}", self.private_key.display(), e);
+					None
+				},
+				Ok(key_info) => {
+					if key_info.encrypted {
+						prompt_ssh_key_password(&self.private_key).ok()
+					} else {
+						None
+					}
+				},
+			};
+			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, password.as_deref())
+		}
 	}
 }
 
@@ -465,6 +507,12 @@ impl PlaintextCredentials {
 	fn to_credentials(&self) -> Result<git2::Cred, git2::Error> {
 		git2::Cred::userpass_plaintext(&self.username, &self.password)
 	}
+}
+
+fn prompt_ssh_key_password(private_key_path: &Path) -> Result<String, std::io::Error> {
+	let mut terminal = terminal_prompt::Terminal::open()?;
+	writeln!(terminal, "Encryption password needed for private key: {}", private_key_path.display())?;
+	terminal.prompt_sensitive("Password: ")
 }
 
 fn prompt_credentials(username: Option<&str>, url: &str) -> Result<PlaintextCredentials, std::io::Error> {

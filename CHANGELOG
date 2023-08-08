@@ -1,3 +1,7 @@
+# Unreleased
+- [change][major] Add optional password parameter to `GitAuthenticator::add_ssh_key_file()`.
+- [add][minor] Add option to prompt for the password of encrypted SSH key files.
+
 # Version 0.2.0 - 2023-08-08
 - [remove][major] Remove `GitAuthenticator::run_operation()`.
 - [change][major] Support only one username per domain name.
