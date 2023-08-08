@@ -47,6 +47,33 @@ use std::collections::BTreeMap;
 use std::path::{PathBuf, Path};
 use std::io::Write;
 
+#[cfg(feature = "log")]
+mod log {
+	pub use ::log::warn;
+	pub use ::log::debug;
+	pub use ::log::trace;
+}
+
+#[cfg(feature = "log")]
+use crate::log::*;
+
+#[cfg(not(feature = "log"))]
+#[macro_use]
+mod log {
+	macro_rules! warn {
+		($($tokens:tt)*) => { { let _ = format_args!($($tokens)*); } };
+	}
+
+	macro_rules! debug {
+		($($tokens:tt)*) => { { let _ = format_args!($($tokens)*); } };
+	}
+
+	macro_rules! trace {
+		($($tokens:tt)*) => { { let _ = format_args!($($tokens)*); } };
+	}
+}
+
+
 /// Configurable authenticator to use with [`git2`].
 #[derive(Debug, Clone)]
 pub struct GitAuthenticator {
@@ -330,6 +357,8 @@ fn make_credentials_callback<'a>(
 	let mut ssh_keys = authenticator.ssh_keys.iter();
 
 	move |url: &str, username: Option<&str>, allowed: git2::CredentialType| {
+		trace!("credentials callback called with url: {url:?}, username: {username:?}, allowed_credentials: {allowed:?}");
+
 		// If git2 is asking for a username, we got an SSH url without username specified.
 		// After we supply a username, it will ask for the real credentials.
 		//
@@ -338,7 +367,14 @@ fn make_credentials_callback<'a>(
 		// If this happens, we'll bail and go into stage 2.
 		if allowed.contains(git2::CredentialType::USERNAME) {
 			if let Some(username) = authenticator.get_username(url) {
-				return git2::Cred::username(username);
+				debug!("credentials_callback: returning username: {username:?}");
+				match git2::Cred::username(username) {
+					Ok(x) => return Ok(x),
+					Err(e) => {
+						debug!("credentials_callback: failed to wrap username: {e}");
+						return Err(e);
+					},
+				}
 			}
 		}
 
@@ -347,14 +383,19 @@ fn make_credentials_callback<'a>(
 			if let Some(username) = username {
 				if try_ssh_agent {
 					try_ssh_agent = false;
-					if let Ok(credentials) = git2::Cred::ssh_key_from_agent(username) {
-						return Ok(credentials)
+					debug!("credentials_callback: trying ssh_key_from_agent with username: {username:?}");
+					match git2::Cred::ssh_key_from_agent(username) {
+						Ok(x) => return Ok(x),
+						Err(e) => debug!("credentials_callback: failed to use SSH agent: {e}"),
 					}
 				}
+
 				#[allow(clippy::while_let_on_iterator)] // Incorrect lint: we're not consuming the iterator.
 				while let Some(key) = ssh_keys.next() {
-					if let Ok(credentials) = key.to_credentials(username) {
-						return Ok(credentials)
+					debug!("credentials_callback: trying ssh key, username: {username:?}, private key: {:?}", key.private_key);
+					match key.to_credentials(username) {
+						Ok(x) => return Ok(x),
+						Err(e) => debug!("credentials_callback: failed to use SSH key from file {:?}: {e}", key.private_key),
 					}
 				}
 			}
@@ -364,29 +405,39 @@ fn make_credentials_callback<'a>(
 		if allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
 			// Try provided plaintext credentials first.
 			if let Some(credentials) = authenticator.get_plaintext_credentials(url) {
-				if let Ok(credentials) = credentials.to_credentials() {
-					return Ok(credentials)
+				debug!("credentials_callback: trying plain text credentials with username: {:?}", credentials.username);
+				match credentials.to_credentials() {
+					Ok(x) => return Ok(x),
+					Err(e) => {
+						debug!("credentials_callback: failed to wrap plain text credentials: {e}");
+						return Err(e);
+					},
 				}
 			}
 
 			// Try the git credential helper.
 			if try_cred_helper {
 				try_cred_helper = false;
-				if let Ok(credentials) = git2::Cred::credential_helper(git_config, url, username) {
-					return Ok(credentials);
+				debug!("credentials_callback: trying credential_helper");
+				match git2::Cred::credential_helper(git_config, url, username) {
+					Ok(x) => return Ok(x),
+					Err(e) => debug!("credentials_callback: failed to use credential helper: {e}"),
 				}
 			}
 
 			// Prompt the user on the terminal.
 			if try_password_prompt > 0 {
 				try_password_prompt -= 1;
-				if let Ok(credentials) = prompt_credentials(username, url) {
-					return Ok(credentials);
+				match prompt_credentials(username, url) {
+					Err(e) => warn!("Failed to prompt for credentials from terminal: {e}"),
+					Ok(credentials) => {
+						debug!("credentials_callback: trying plain text credentials from the terminal with username: {:?}", credentials.username);
+						return credentials.to_credentials();
+					},
 				}
 			}
 		}
 
-		// Whelp, we tried our best
 		Err(git2::Error::from_str("all authentication attempts failed"))
 	}
 }
@@ -416,27 +467,23 @@ impl PlaintextCredentials {
 	}
 }
 
-fn prompt_credentials(username: Option<&str>, url: &str) -> Result<git2::Cred, git2::Error> {
-	let mut terminal = terminal_prompt::Terminal::open()
-		.map_err(io_to_git_error)?;
-	writeln!(terminal, "Authentication needed for git: {url}")
-		.map_err(io_to_git_error)?;
+fn prompt_credentials(username: Option<&str>, url: &str) -> Result<PlaintextCredentials, std::io::Error> {
+	let mut terminal = terminal_prompt::Terminal::open()?;
+	writeln!(terminal, "Authentication needed for git: {url}")?;
 	if let Some(username) = username {
-		let password = terminal.prompt_sensitive("Password: ")
-			.map_err(io_to_git_error)?;
-		git2::Cred::userpass_plaintext(username, &password)
+		let password = terminal.prompt_sensitive("Password: ")?;
+		Ok(PlaintextCredentials {
+			username: username.into(),
+			password,
+		})
 	} else {
-		let username = terminal.prompt("Username: ")
-			.map_err(io_to_git_error)?;
-		let password = terminal.prompt_sensitive("Password: ")
-			.map_err(io_to_git_error)?;
-		git2::Cred::userpass_plaintext(&username, &password)
+		let username = terminal.prompt("Username: ")?;
+		let password = terminal.prompt_sensitive("Password: ")?;
+		Ok(PlaintextCredentials {
+			username,
+			password,
+		})
 	}
-}
-
-fn io_to_git_error(input: std::io::Error) -> git2::Error {
-	// TODO: do better error mapping?
-	git2::Error::from_str(&input.to_string())
 }
 
 fn get_pub_key_path(priv_key_path: &Path) -> Option<PathBuf> {

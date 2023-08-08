@@ -6,6 +6,7 @@
 - [add][minor] Add `GitAuthenticator::clone()`.
 - [add][minor] Add `GitAuthenticator::fetch()`.
 - [add][minor] Add `GitAuthenticator::push()`.
+- [add][minor] Add optional support for the `log` crate.
 - [fix][patch] Bump minimum `terminal-prompt` version to `0.2.2`.
 
 # Version 0.1.1 - 2023-08-07
