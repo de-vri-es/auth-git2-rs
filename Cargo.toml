@@ -23,3 +23,7 @@ terminal-prompt = "0.2.2"
 
 [dev-dependencies]
 assert2 = "0.3.11"
+auth-git2 = { path = ".", features = ["log"] }
+clap = { version = "4.3.21", features = ["derive"] }
+env_logger = "0.10.0"
+git2 = "0.17.2"
