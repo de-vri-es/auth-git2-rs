@@ -16,3 +16,6 @@ publish = ["crates-io"]
 dirs = "5.0.1"
 git2 = { version = "0.17.2", default-features = false }
 terminal-prompt = "0.2.2"
+
+[dev-dependencies]
+assert2 = "0.3.11"

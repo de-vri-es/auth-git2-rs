@@ -5,7 +5,8 @@
 //!
 //! In the simplest case, you can create a [`GitAuthenticator`] struct and directly use it for authentication.
 //! By default, it will enable all supported authentication mechanisms.
-//! You can run any git operation that requires authentication using the [`GitAuthenticator::run_operation()`] function.
+//! You can get a [`git2::Credentials`] callback for use with any git operation that requires authentication using the [`GitAuthenticator::credentials()`] function.
+//! Alternatively, you can use a utility function like [`GitAuthenticator::clone()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
 //!
 //! # Features
 //!
@@ -22,34 +23,35 @@
 //! use auth_git2::GitAuthenticator;
 //! use std::path::Path;
 //!
+//! let auth = GitAuthenticator::default();
 //! let git_config = git2::Config::open_default()?;
-//! let repo = GitAuthenticator::default()
-//!     .run_operation(&git_config, |credentials| {
-//!         let mut remote_callbacks = git2::RemoteCallbacks::new();
-//!         remote_callbacks.credentials(credentials);
-//!         let mut fetch_options = git2::FetchOptions::new();
-//!         fetch_options.remote_callbacks(remote_callbacks);
-//!         let mut repo_builder = git2::build::RepoBuilder::new();
-//!         repo_builder.fetch_options(fetch_options);
+//! let mut repo_builder = git2::build::RepoBuilder::new();
+//! let mut fetch_options = git2::FetchOptions::new();
+//! let mut remote_callbacks = git2::RemoteCallbacks::new();
 //!
-//!         let url = "https://github.com/de-vri-es/auth-git2-rs";
-//!         let path = Path::new("/tmp/auth-git2-rs");
-//!         repo_builder.clone(url, path)
-//!     })?;
+//! remote_callbacks.credentials(auth.credentials(&git_config));
+//! fetch_options.remote_callbacks(remote_callbacks);
+//! repo_builder.fetch_options(fetch_options);
+//!
+//! let url = "https://github.com/de-vri-es/auth-git2-rs";
+//! let into = Path::new("/tmp/dyfhxoaj/auth-git2-rs");
+//! let mut repo = repo_builder.clone(url, into);
+//! # let _ = repo;
 //! # Ok(())
 //! # }
 //! ```
 
 #![warn(missing_docs)]
 
+use std::collections::BTreeMap;
 use std::path::{PathBuf, Path};
 use std::io::Write;
 
 /// Configurable authenticator to use with [`git2`].
 #[derive(Debug, Clone)]
 pub struct GitAuthenticator {
-	/// Plaintext credentials to try.
-	plaintext_credentials: Vec<PlaintextCredentials>,
+	/// Map of domain names to plaintext credentials.
+	plaintext_credentials: BTreeMap<String, PlaintextCredentials>,
 
 	/// Try getting username/password from the git credential helper.
 	try_cred_helper: bool,
@@ -57,8 +59,8 @@ pub struct GitAuthenticator {
 	/// Number of times to ask the user for a username/password on the terminal.
 	try_password_prompt: u32,
 
-	/// Usernames to try for SSH connections if no username was specified.
-	usernames: Vec<String>,
+	/// Map of domain names to usernames to try for SSH connections if no username was specified.
+	usernames: BTreeMap<String, String>,
 
 	/// Try to use the SSH agent to get a working SSH key.
 	try_ssh_agent: bool,
@@ -101,16 +103,21 @@ impl GitAuthenticator {
 		Self {
 			try_ssh_agent: false,
 			try_cred_helper: false,
-			plaintext_credentials: Vec::new(),
+			plaintext_credentials: BTreeMap::new(),
 			try_password_prompt: 0,
-			usernames: Vec::new(),
+			usernames: BTreeMap::new(),
 			ssh_keys: Vec::new(),
 		}
 	}
 
-	/// Add a username + password to try for authentication.
-	pub fn add_plaintext_credentials(mut self, username: String, password: String) -> Self {
-		self.plaintext_credentials.push(PlaintextCredentials {
+	/// Set the username + password to use for a specific domain.
+	///
+	/// Use the special value "*" for the domain name to add fallback credentials when there is no exact match for the domain.
+	pub fn add_plaintext_credentials(mut self, domain: impl Into<String>, username: impl Into<String>, password: impl Into<String>) -> Self {
+		let domain = domain.into();
+		let username = username.into();
+		let password = password.into();
+		self.plaintext_credentials.insert(domain, PlaintextCredentials {
 			username,
 			password,
 		});
@@ -137,8 +144,12 @@ impl GitAuthenticator {
 	///
 	/// Some authentication mechanisms need a username, but not all valid `git` URLs specify one.
 	/// You can add one or more usernames to try in that situation.
-	pub fn add_username(mut self, name: String) -> Self {
-		self.usernames.push(name);
+	///
+	/// You can use the special domain name "*" to set the username for all domains without a specific username set.
+	pub fn add_username(mut self, domain: impl Into<String>, username: impl Into<String>) -> Self {
+		let domain = domain.into();
+		let username = username.into();
+		self.usernames.insert(domain, username);
 		self
 	}
 
@@ -147,7 +158,7 @@ impl GitAuthenticator {
 	/// The default username if read from the `USER` or `USERNAME` environment variable.
 	pub fn add_default_username(self) -> Self {
 		if let Ok(username) = std::env::var("USER").or_else(|_| std::env::var("USERNAME")) {
-			self.add_username(username)
+			self.add_username("*", username)
 		} else {
 			self
 		}
@@ -211,64 +222,108 @@ impl GitAuthenticator {
 		self
 	}
 
-	/// Run a user operation with authentication.
-	///
-	/// The user operation is a callback that received a [`git2::Credentials`] object (which is technically also a callback).
-	/// You should use the provided [`git2::Credentials`] when calling [`git2`] functions.
-	///
-	/// Note: We may need to call the user operation multiple times to try authentication with different usernames.
-	/// You should ensure that the provided callback works correctly when called multiple times.
+	/// Get the credentials callback to use for [`git2::Credentials`].
 	///
 	/// # Example: Fetch from a remote with authentication
 	/// ```no_run
 	/// # fn foo(repo: &mut git2::Repository) -> Result<(), git2::Error> {
 	/// use auth_git2::GitAuthenticator;
 	///
+	/// let auth = GitAuthenticator::default();
 	/// let git_config = repo.config()?;
-	/// let mut remote = repo.find_remote("origin")?;
-	/// GitAuthenticator::default()
-	///     .run_operation(&git_config, |credentials| {
-	///         let mut remote_callbacks = git2::RemoteCallbacks::new();
-	///         remote_callbacks.credentials(credentials);
-	///         let mut fetch_options = git2::FetchOptions::new();
-	///         fetch_options.remote_callbacks(remote_callbacks);
-	///         remote.fetch(&["main"], Some(&mut fetch_options), None)
-	///     })?;
+	/// let mut fetch_options = git2::FetchOptions::new();
+	/// let mut remote_callbacks = git2::RemoteCallbacks::new();
+	///
+	/// remote_callbacks.credentials(auth.credentials(&git_config));
+	/// fetch_options.remote_callbacks(remote_callbacks);
+	///
+	/// repo.find_remote("origin")?
+	///     .fetch(&["main"], Some(&mut fetch_options), None)?;
 	/// # Ok(())
 	/// # }
 	/// ```
-	pub fn run_operation<F, T>(&self, git_config: &git2::Config, mut user_operation: F) -> Result<T, git2::Error>
-	where
-		F: FnMut(&mut git2::Credentials<'_>) -> Result<T, git2::Error>,
-	{
-		let mut need_stage2 = false;
-		let result = user_operation(&mut make_stage1_callback(self, git_config, &mut need_stage2));
-		if result.is_ok() || ! need_stage2 {
-			return result;
-		}
+	pub fn credentials<'a>(
+		&'a self,
+		git_config: &'a git2::Config,
+	) -> impl 'a + FnMut(&str, Option<&str>, git2::CredentialType) -> Result<git2::Cred, git2::Error> {
+		make_credentials_callback(self, git_config)
+	}
 
-		for username in &self.usernames {
-			// We should get `USERNAME` first, where we just return our attempt,
-			// and then after that we should get `SSH_KEY`. If the first attempt
-			// fails we'll get called again, but we don't have another option so
-			// we bail out.
-			let mut exhausted = false;
-			let result = user_operation(&mut make_stage2_callback(self, username, &mut exhausted));
-			if result.is_ok() || !exhausted {
-				return result;
+	/// Clone a repository using the git authenticator.
+	///
+	/// If you need more control over the clone options,
+	/// use [`Self::credentials()`] with a [`git2::build::RepoBuilder`].
+	pub fn clone(&self, url: impl AsRef<str>, into: impl AsRef<Path>) -> Result<git2::Repository, git2::Error> {
+		let url = url.as_ref();
+		let into = into.as_ref();
+
+		let git_config = git2::Config::open_default()?;
+		let mut repo_builder = git2::build::RepoBuilder::new();
+		let mut fetch_options = git2::FetchOptions::new();
+		let mut remote_callbacks = git2::RemoteCallbacks::new();
+
+		remote_callbacks.credentials(self.credentials(&git_config));
+		fetch_options.remote_callbacks(remote_callbacks);
+		repo_builder.fetch_options(fetch_options);
+
+		repo_builder.clone(url, into)
+	}
+
+
+	/// Fetch from a remote using the git authenticator.
+	///
+	/// If you need more control over the fetch options,
+	/// use [`Self::credentials()`] with a [`git2::Remote::fetch`].
+	pub fn fetch(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str], reflog_msg: Option<&str>) -> Result<(), git2::Error> {
+		let git_config = repo.config()?;
+		let mut fetch_options = git2::FetchOptions::new();
+		let mut remote_callbacks = git2::RemoteCallbacks::new();
+
+		remote_callbacks.credentials(self.credentials(&git_config));
+		fetch_options.remote_callbacks(remote_callbacks);
+		remote.fetch(refspecs, Some(&mut fetch_options), reflog_msg)
+	}
+
+	/// Push to a remote using the git authenticator.
+	///
+	/// If you need more control over the push options,
+	/// use [`Self::credentials()`] with a [`git2::Remote::push`].
+	pub fn push(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str]) -> Result<(), git2::Error> {
+		let git_config = repo.config()?;
+		let mut push_options = git2::PushOptions::new();
+		let mut remote_callbacks = git2::RemoteCallbacks::new();
+
+		remote_callbacks.credentials(self.credentials(&git_config));
+		push_options.remote_callbacks(remote_callbacks);
+
+		remote.push(refspecs, Some(&mut push_options))
+	}
+
+	/// Get the configured username for a URL.
+	fn get_username(&self, url: &str) -> Option<&str> {
+		if let Some(domain) = domain_from_url(url) {
+			if let Some(username) = self.usernames.get(domain) {
+				return Some(username);
 			}
 		}
+		self.usernames.get("*").map(|x| x.as_str())
+	}
 
-		Err(git2::Error::from_str("all authentication attempts failed"))
+	/// Get the configured plaintext credentials for a URL.
+	fn get_plaintext_credentials(&self, url: &str) -> Option<&PlaintextCredentials> {
+		if let Some(domain) = domain_from_url(url) {
+			if let Some(credentials) = self.plaintext_credentials.get(domain) {
+				return Some(credentials);
+			}
+		}
+		self.plaintext_credentials.get("*")
 	}
 }
 
-fn make_stage1_callback<'a>(
+fn make_credentials_callback<'a>(
 	authenticator: &'a GitAuthenticator,
 	git_config: &'a git2::Config,
-	need_stage2: &'a mut bool,
 ) -> impl 'a + FnMut(&str, Option<&str>, git2::CredentialType) -> Result<git2::Cred, git2::Error> {
-	let mut plaintext_credentials = authenticator.plaintext_credentials.iter();
 	let mut try_cred_helper = authenticator.try_cred_helper;
 	let mut try_password_prompt = authenticator.try_password_prompt;
 	let mut try_ssh_agent = authenticator.try_ssh_agent;
@@ -282,8 +337,9 @@ fn make_stage1_callback<'a>(
 		// so to try different usernames, we need to retry the git operation multiple times.
 		// If this happens, we'll bail and go into stage 2.
 		if allowed.contains(git2::CredentialType::USERNAME) {
-			*need_stage2 = true;
-			return Err(git2::Error::from_str("gonna try usernames later"));
+			if let Some(username) = authenticator.get_username(url) {
+				return git2::Cred::username(username);
+			}
 		}
 
 		// Try public key authentication.
@@ -305,10 +361,9 @@ fn make_stage1_callback<'a>(
 		}
 
 		// Sometimes libgit2 will ask for a username/password in plaintext.
-		// Let's try git's `credential.helper` support first before bothering the user with a prompt.
 		if allowed.contains(git2::CredentialType::USER_PASS_PLAINTEXT) {
 			// Try provided plaintext credentials first.
-			if let Some(credentials) = plaintext_credentials.next() {
+			if let Some(credentials) = authenticator.get_plaintext_credentials(url) {
 				if let Ok(credentials) = credentials.to_credentials() {
 					return Ok(credentials)
 				}
@@ -333,43 +388,6 @@ fn make_stage1_callback<'a>(
 
 		// Whelp, we tried our best
 		Err(git2::Error::from_str("all authentication attempts failed"))
-	}
-}
-
-fn make_stage2_callback<'a>(
-	authenticator: &'a GitAuthenticator,
-	username: &'a str,
-	exhausted: &'a mut bool,
-) -> impl 'a + FnMut(&str, Option<&str>, git2::CredentialType) -> Result<git2::Cred, git2::Error> {
-	let mut gave_username = false;
-	let mut try_ssh_agent = authenticator.try_ssh_agent;
-	let mut ssh_keys = authenticator.ssh_keys.iter();
-
-	*exhausted = false;
-	move |_url, _username, allowed_auth| {
-		if allowed_auth.contains(git2::CredentialType::USERNAME) && !gave_username {
-			gave_username = true;
-			return git2::Cred::username(username);
-		}
-
-		if allowed_auth.contains(git2::CredentialType::SSH_KEY) {
-			if try_ssh_agent {
-				try_ssh_agent = false;
-				if let Ok(credentials) = git2::Cred::ssh_key_from_agent(username) {
-					return Ok(credentials)
-				}
-			}
-
-			#[allow(clippy::while_let_on_iterator)] // Incorrect lint: we're not consuming the iterator.
-			while let Some(key) = ssh_keys.next() {
-				if let Ok(credentials) = key.to_credentials(username) {
-					return Ok(credentials)
-				}
-			}
-		}
-
-		*exhausted = true;
-		Err(git2::Error::from_str("no working authentication available"))
 	}
 }
 
@@ -429,5 +447,46 @@ fn get_pub_key_path(priv_key_path: &Path) -> Option<PathBuf> {
 		Some(pub_key_path)
 	} else {
 		None
+	}
+}
+
+fn domain_from_url(url: &str) -> Option<&str> {
+	// We support:
+	// Relative paths
+	// Real URLs: scheme://[user[:pass]@]host/path
+	// SSH URLs: [user@]host:path.
+
+	// If there is no colon: URL is a relative path and there is no domain (or need for credentials).
+	let (head, tail) = url.split_once(':')?;
+
+	// Real URL
+	if let Some(tail) = tail.strip_prefix("//") {
+		let (_credentials, tail) = tail.split_once('@').unwrap_or(("", tail));
+		let (host, _path) = tail.split_once('/').unwrap_or((tail, ""));
+		Some(host)
+	// SSH "URL"
+	} else {
+		let (_credentials, host) = head.split_once('@').unwrap_or(("", head));
+		Some(host)
+	}
+}
+
+#[cfg(test)]
+mod test {
+	use super::*;
+	use assert2::assert;
+
+	#[test]
+	fn test_domain_from_url() {
+		assert!(let Some("host") = domain_from_url("user@host:path"));
+		assert!(let Some("host") = domain_from_url("host:path"));
+		assert!(let Some("host") = domain_from_url("host:path@with:stuff"));
+
+		assert!(let Some("host") = domain_from_url("ssh://user:pass@host/path"));
+		assert!(let Some("host") = domain_from_url("ssh://user@host/path"));
+		assert!(let Some("host") = domain_from_url("ssh://host/path"));
+
+		assert!(let None = domain_from_url("some/relative/path"));
+		assert!(let None = domain_from_url("some/relative/path@with-at-sign"));
 	}
 }

@@ -7,7 +7,8 @@ This crate aims to make it easy.
 
 In the simplest case, you can create a [`GitAuthenticator`] struct and directly use it for authentication.
 By default, it will enable all supported authentication mechanisms.
-You can run any git operation that requires authentication using the [`GitAuthenticator::run_operation()`] function.
+You can get a [`git2::Credentials`] callback for use with any git operation that requires authentication using the [`GitAuthenticator::credentials()`] function.
+Alternatively, you can use a utility function like [`GitAuthenticator::clone()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
 
 ## Features
 
@@ -23,22 +24,25 @@ You can run any git operation that requires authentication using the [`GitAuthen
 use auth_git2::GitAuthenticator;
 use std::path::Path;
 
+let auth = GitAuthenticator::default();
 let git_config = git2::Config::open_default()?;
-let repo = GitAuthenticator::default()
-    .run_operation(&git_config, |credentials| {
-        let mut remote_callbacks = git2::RemoteCallbacks::new();
-        remote_callbacks.credentials(credentials);
-        let mut fetch_options = git2::FetchOptions::new();
-        fetch_options.remote_callbacks(remote_callbacks);
-        let mut repo_builder = git2::build::RepoBuilder::new();
-        repo_builder.fetch_options(fetch_options);
+let mut repo_builder = git2::build::RepoBuilder::new();
+let mut fetch_options = git2::FetchOptions::new();
+let mut remote_callbacks = git2::RemoteCallbacks::new();
 
-        let url = "https://github.com/de-vri-es/auth-git2-rs";
-        let path = Path::new("/tmp/auth-git2-rs");
-        repo_builder.clone(url, path)
-    })?;
+remote_callbacks.credentials(auth.credentials(&git_config));
+fetch_options.remote_callbacks(remote_callbacks);
+repo_builder.fetch_options(fetch_options);
+
+let url = "https://github.com/de-vri-es/auth-git2-rs";
+let into = Path::new("/tmp/dyfhxoaj/auth-git2-rs");
+let mut repo = repo_builder.clone(url, into);
 ```
 
 [`git2`]: https://docs.rs/git2
 [`GitAuthenticator`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html
-[`GitAuthenticator::run_operation()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.run_operation
+[`git2::Credentials`]: https://docs.rs/git2/latest/git2/type.Credentials.html
+[`GitAuthenticator::credentials()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.credentials
+[`GitAuthenticator::clone()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.clone
+[`GitAuthenticator::fetch()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.fetch
+[`GitAuthenticator::push()`]: https://docs.rs/auth-git2/latest/git2_auth/struct.GitAuthenticator.html#method.push

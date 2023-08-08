@@ -1,4 +1,11 @@
 # Unreleased
+- [remove][major] Remove `GitAuthenticator::run_operation()`.
+- [change][major] Support only one username per domain name.
+- [change][major] Support only one set of plaintext credentials per domain name.
+- [add][minor] Add `GitAuthenticator::credentials()` to get the credentials callback.
+- [add][minor] Add `GitAuthenticator::clone()`.
+- [add][minor] Add `GitAuthenticator::fetch()`.
+- [add][minor] Add `GitAuthenticator::push()`.
 - [fix][patch] Bump minimum `terminal-prompt` version to `0.2.2`.
 
 # Version 0.1.1 - 2023-08-07
