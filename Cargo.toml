@@ -1,6 +1,6 @@
 [package]
 name = "auth-git2"
-version = "0.2.0"
+version = "0.3.0"
 description = "Authentication for `git2`"
 license = "BSD-2-Clause"
 authors = ["Maarten de Vries <maarten@de-vri.es>"]
