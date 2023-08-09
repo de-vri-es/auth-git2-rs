@@ -17,7 +17,7 @@ log = ["dep:log"]
 
 [dependencies]
 dirs = "5.0.1"
-git2 = { version = "0.17.2", default-features = false }
+git2 = { version = ">0.14, <18.0", default-features = false }
 log = { version = "0.4.19", optional = true }
 terminal-prompt = "0.2.2"
 
@@ -26,4 +26,4 @@ assert2 = "0.3.11"
 auth-git2 = { path = ".", features = ["log"] }
 clap = { version = "4.3.21", features = ["derive"] }
 env_logger = "0.10.0"
-git2 = "0.17.2"
+git2 = ">=0.14, <18.0"
