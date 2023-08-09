@@ -227,7 +227,8 @@ impl GitAuthenticator {
 	/// A matching `.pub` file will also be read if it exists.
 	/// For example, if you add the private key `"foo/my_ssh_id"`,
 	/// then `"foo/my_ssh_id.pub"` will be used too, if it exists.
-	pub fn add_ssh_key_from_file(mut self, private_key: PathBuf, password: impl Into<Option<String>>) -> Self {
+	pub fn add_ssh_key_from_file(mut self, private_key: impl Into<PathBuf>, password: impl Into<Option<String>>) -> Self {
+		let private_key = private_key.into();
 		let public_key = get_pub_key_path(&private_key);
 		let password = password.into();
 		self.ssh_keys.push(PrivateKeyFile {
