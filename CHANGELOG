@@ -1,3 +1,6 @@
+# Unreleased
+- [change][patch] Document that the `askpass` helper will be used for prompts, if available.
+
 # Version 0.3.1 - 2023-08-09
 - [add][minor] Add support for `askpass` helpers.
 

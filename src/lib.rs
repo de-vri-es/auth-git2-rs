@@ -174,6 +174,12 @@ impl GitAuthenticator {
 	/// Configure the number of times we should prompt the user for a username/password.
 	///
 	/// Set to `0` to disable.
+	///
+	/// If an askpass helper is configured, it will be used.
+	/// Otherwise, the user will be prompted directly on the main terminal of the process.
+	///
+	/// An askpass helper can be configured in the `GIT_ASKPASS` environment variable,
+	/// the `core.askPass` configuration value or the `SSH_ASKPASS` environment variable.
 	pub fn try_password_prompt(mut self, max_count: u32) -> Self {
 		self.try_password_prompt = max_count;
 		self
@@ -269,6 +275,12 @@ impl GitAuthenticator {
 	}
 
 	/// Prompt for passwords for encrypted SSH keys if needed.
+	///
+	/// If an askpass helper is configured, it will be used.
+	/// Otherwise, the user will be prompted directly on the main terminal of the process.
+	///
+	/// An askpass helper can be configured in the `GIT_ASKPASS` environment variable,
+	/// the `core.askPass` configuration value or the `SSH_ASKPASS` environment variable.
 	pub fn prompt_ssh_key_password(mut self, enable: bool) -> Self {
 		self.prompt_ssh_key_password = enable;
 		self
