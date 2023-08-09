@@ -12,13 +12,15 @@ Alternatively, you can use a utility function like [`GitAuthenticator::clone()`]
 
 ## Features
 
-* Minimal dependency tree!
-* Query the SSH agent.
+* Small dependency tree.
+* Query the SSH agent for private key authentication.
 * Get SSH keys from files.
-* Prompt for SSH key passwords if needed (for OpenSSH private keys).
-* Query the git credential helper.
-* Use provided plain username + password.
-* Prompt the user for username + password on the terminal.
+* Prompt the user for passwords for encrypted SSH keys.
+** Only supported for OpenSSH private keys.
+* Query the git credential helper for usernames and passwords.
+* Use pre-provided plain usernames and passwords.
+* Use the git askpass helper to ask the user for credentials.
+* Fallback to prompting the user on the terminal if there is no `askpass` helper.
 
 ## Example: Clone a repository with authentication
 ```rust

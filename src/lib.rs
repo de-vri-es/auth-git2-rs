@@ -10,13 +10,15 @@
 //!
 //! # Features
 //!
-//! * Minimal dependency tree!
-//! * Query the SSH agent.
+//! * Small dependency tree.
+//! * Query the SSH agent for private key authentication.
 //! * Get SSH keys from files.
-//! * Prompt for SSH key passwords if needed (for OpenSSH private keys).
-//! * Query the git credential helper.
-//! * Use provided plain username + password.
-//! * Prompt the user for username + password on the terminal.
+//! * Prompt the user for passwords for encrypted SSH keys.
+//! ** Only supported for OpenSSH private keys.
+//! * Query the git credential helper for usernames and passwords.
+//! * Use pre-provided plain usernames and passwords.
+//! * Use the git askpass helper to ask the user for credentials.
+//! * Fallback to prompting the user on the terminal if there is no `askpass` helper.
 //!
 //! # Example: Clone a repository with authentication
 //! ```no_run
@@ -46,8 +48,8 @@
 
 use std::collections::BTreeMap;
 use std::path::{PathBuf, Path};
-use std::io::Write;
 
+mod askpass;
 mod base64_decode;
 mod ssh_key;
 
@@ -416,7 +418,7 @@ fn make_credentials_callback<'a>(
 				#[allow(clippy::while_let_on_iterator)] // Incorrect lint: we're not consuming the iterator.
 				while let Some(key) = ssh_keys.next() {
 					debug!("credentials_callback: trying ssh key, username: {username:?}, private key: {:?}", key.private_key);
-					match key.to_credentials(username, authenticator.prompt_ssh_key_password) {
+					match key.to_credentials(username, authenticator.prompt_ssh_key_password, git_config) {
 						Ok(x) => return Ok(x),
 						Err(e) => debug!("credentials_callback: failed to use SSH key from file {:?}: {e}", key.private_key),
 					}
@@ -451,8 +453,15 @@ fn make_credentials_callback<'a>(
 			// Prompt the user on the terminal.
 			if try_password_prompt > 0 {
 				try_password_prompt -= 1;
-				match prompt_credentials(username, url) {
-					Err(e) => warn!("Failed to prompt for credentials from terminal: {e}"),
+				match askpass::prompt_credentials(username, url, git_config) {
+					Err(e) => {
+						warn!("Failed to prompt for credentials from terminal: {e}");
+						if let Some(extra_message) = e.extra_message() {
+							for line in extra_message.lines() {
+								warn!("askpass: {line}");
+							}
+						}
+					},
 					Ok(credentials) => {
 						debug!("credentials_callback: trying plain text credentials from the terminal with username: {:?}", credentials.username);
 						return credentials.to_credentials();
@@ -473,7 +482,7 @@ struct PrivateKeyFile {
 }
 
 impl PrivateKeyFile {
-	fn to_credentials(&self, username: &str, prompt: bool) -> Result<git2::Cred, git2::Error> {
+	fn to_credentials(&self, username: &str, prompt: bool, git_config: &git2::Config) -> Result<git2::Cred, git2::Error> {
 		if let Some(password) = &self.password {
 			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, Some(password))
 		} else if !prompt {
@@ -486,7 +495,17 @@ impl PrivateKeyFile {
 				},
 				Ok(key_info) => {
 					if key_info.encrypted {
-						prompt_ssh_key_password(&self.private_key).ok()
+						match askpass::prompt_ssh_key_password(&self.private_key, git_config) {
+							Ok(x) => Some(x),
+							Err(e) => {
+								if let Some(extra_message) = e.extra_message() {
+									for line in extra_message.lines() {
+										warn!("askpass: {line}");
+									}
+								}
+								None
+							},
+						}
 					} else {
 						None
 					}
@@ -506,31 +525,6 @@ struct PlaintextCredentials {
 impl PlaintextCredentials {
 	fn to_credentials(&self) -> Result<git2::Cred, git2::Error> {
 		git2::Cred::userpass_plaintext(&self.username, &self.password)
-	}
-}
-
-fn prompt_ssh_key_password(private_key_path: &Path) -> Result<String, std::io::Error> {
-	let mut terminal = terminal_prompt::Terminal::open()?;
-	writeln!(terminal, "Encryption password needed for private key: {}", private_key_path.display())?;
-	terminal.prompt_sensitive("Password: ")
-}
-
-fn prompt_credentials(username: Option<&str>, url: &str) -> Result<PlaintextCredentials, std::io::Error> {
-	let mut terminal = terminal_prompt::Terminal::open()?;
-	writeln!(terminal, "Authentication needed for git: {url}")?;
-	if let Some(username) = username {
-		let password = terminal.prompt_sensitive("Password: ")?;
-		Ok(PlaintextCredentials {
-			username: username.into(),
-			password,
-		})
-	} else {
-		let username = terminal.prompt("Username: ")?;
-		let password = terminal.prompt_sensitive("Password: ")?;
-		Ok(PlaintextCredentials {
-			username,
-			password,
-		})
 	}
 }
 
