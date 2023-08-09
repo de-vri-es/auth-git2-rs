@@ -2,25 +2,46 @@ use std::path::Path;
 
 use crate::base64_decode;
 
+/// An error that can occur when analyzing SSH keys.
 #[derive(Debug)]
 pub enum Error {
+	/// Failed to open the key file.
 	OpenFile(std::io::Error),
+
+	/// Failed to read from the key file.
 	ReadFile(std::io::Error),
+
+	/// Missing PEM trailer in the file (there was a PEM header).
 	MissingPemTrailer,
+
+	/// The key is not valid somehow.
 	MalformedKey,
+
+	/// There was an invalid base64 blob in the key.
 	Base64(base64_decode::Error),
 }
 
-pub enum KeyType {
+/// The format of a key file.
+pub enum KeyFormat {
+	/// We don't know what format it is.
 	Unknown,
-	OpenSsh,
+
+	/// It's an openssh-key-v1 file.
+	///
+	/// See https://coolaj86.com/articles/the-openssh-private-key-format/ for a description of the format.
+	OpensshKeyV1,
 }
 
+/// Information about a key file.
 pub struct KeyInfo {
-	pub kind: KeyType,
+	/// The format of the key file.
+	pub format: KeyFormat,
+
+	/// Is the key encrypted?
 	pub encrypted: bool,
 }
 
+/// Analyze an SSH key file.
 pub fn analyze_ssh_key_file(priv_key_path: &Path) -> Result<KeyInfo, Error> {
 	use std::io::Read;
 
@@ -32,12 +53,12 @@ pub fn analyze_ssh_key_file(priv_key_path: &Path) -> Result<KeyInfo, Error> {
 	analyze_pem_openssh_key(&buffer)
 }
 
-
+/// Analyze a PEM encoded openssh-key-v1 file.
 fn analyze_pem_openssh_key(data: &[u8]) -> Result<KeyInfo, Error> {
 	let data = trim_bytes(data);
 	let data = match data.strip_prefix(b"-----BEGIN OPENSSH PRIVATE KEY-----") {
 		Some(x) => x,
-		None => return Ok(KeyInfo { kind: KeyType::Unknown, encrypted: false }),
+		None => return Ok(KeyInfo { format: KeyFormat::Unknown, encrypted: false }),
 	};
 	let data = match data.strip_suffix(b"-----END OPENSSH PRIVATE KEY-----") {
 		Some(x) => x,
@@ -47,6 +68,7 @@ fn analyze_pem_openssh_key(data: &[u8]) -> Result<KeyInfo, Error> {
 	analyze_binary_openssh_key(&data)
 }
 
+/// Analyze a binary openss-key-v1 blob.
 fn analyze_binary_openssh_key(data: &[u8]) -> Result<KeyInfo, Error> {
 	let tail = data.strip_prefix(b"openssh-key-v1\0")
 		.ok_or(Error::MalformedKey)?;
@@ -61,9 +83,10 @@ fn analyze_binary_openssh_key(data: &[u8]) -> Result<KeyInfo, Error> {
 	}
 	let cipher = &tail[..cipher_len];
 	let encrypted = cipher != b"none";
-	Ok(KeyInfo { kind: KeyType::OpenSsh, encrypted })
+	Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted })
 }
 
+/// Trim whitespace from the start and end of a byte slice.
 fn trim_bytes(data: &[u8]) -> &[u8] {
 	let data = match data.iter().position(|b| !b.is_ascii_whitespace()) {
 		Some(x) => &data[x..],
@@ -96,7 +119,7 @@ mod test {
 	#[test]
 	fn test_is_encrypted_pem_openssh_key() {
 		// Encrypted OpenSSH key.
-		assert!(let Ok(KeyInfo { kind: KeyType::OpenSsh, encrypted: true }) = analyze_pem_openssh_key(concat!(
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(concat!(
 			"-----BEGIN OPENSSH PRIVATE KEY-----\n",
 			"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
 			"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n",
@@ -108,7 +131,7 @@ mod test {
 		).as_bytes()));
 
 		// Encrypted OpenSSH key with extra random whitespace.
-		assert!(let Ok(KeyInfo { kind: KeyType::OpenSsh, encrypted: true }) = analyze_pem_openssh_key(concat!(
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: true }) = analyze_pem_openssh_key(concat!(
 			"   \n\t\r-----BEGIN OPENSSH PRIVATE KEY-----\n",
 			"b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABBddrJWnj\n",
 			"6eysG+DqTberHEAAAAEAAAAAEAAAAzAAAAC3NzaC1lZDI1NTE5AAAAIARNG0xAyCq6/OFQ\n  \r",
@@ -120,7 +143,7 @@ mod test {
 		).as_bytes()));
 
 		// Unencrypted OpenSSH key.
-		assert!(let Ok(KeyInfo { kind: KeyType::OpenSsh, encrypted: false }) = analyze_pem_openssh_key(concat!(
+		assert!(let Ok(KeyInfo { format: KeyFormat::OpensshKeyV1, encrypted: false }) = analyze_pem_openssh_key(concat!(
 			"-----BEGIN OPENSSH PRIVATE KEY-----\n",
 			"b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n",
 			"QyNTUxOQAAACDTKM0+RYzELoLewv5n5UoEPhmCpwkrtXM4GpWUVF+w3AAAAJhSNRa9UjUW\n",

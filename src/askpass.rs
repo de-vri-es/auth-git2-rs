@@ -3,34 +3,60 @@ use std::path::{Path, PathBuf};
 
 use crate::PlaintextCredentials;
 
+/// Error that can occur when prompting for a password.
 pub enum Error {
-	Command(std::io::Error),
-	ExitStatus(ExitStatusError),
+	/// Failed to run the askpass command.
+	AskpassCommand(std::io::Error),
+
+	/// Askpass command exitted with a non-zero error code.
+	AskpassExitStatus(AskpassExitStatusError),
+
+	/// Password contains invalid UTF-8.
 	InvalidUtf8(std::string::FromUtf8Error),
+
+	/// Failed to open a handle to the main terminal of the process.
 	OpenTerminal(std::io::Error),
+
+	/// Failed to read/write to the terminal.
 	ReadWriteTerminal(std::io::Error),
 }
 
-pub struct ExitStatusError {
+/// The askpass process exited with a non-zero exit code.
+pub struct AskpassExitStatusError {
+	/// The exit status of the askpass process.
 	pub status: std::process::ExitStatus,
+
+	/// The standard error of the askpass process.
 	pub stderr: Result<String, std::string::FromUtf8Error>,
 }
 
 impl Error {
+	/// Get the extra error message, if any.
+	///
+	/// This will give the standard error of the askpass process if it exited with an error.
 	pub fn extra_message(&self) -> Option<&str> {
 		match self {
-			Self::ExitStatus(e) => e.extra_message(),
+			Self::AskpassExitStatus(e) => e.extra_message(),
 			_ => None,
 		}
 	}
 }
 
-impl ExitStatusError {
+impl AskpassExitStatusError {
+	/// Get the extra error message, if any.
+	///
+	/// This will give the standard error of the askpass process if it exited with an error.
 	pub fn extra_message(&self) -> Option<&str> {
 		self.stderr.as_deref().ok()
 	}
 }
 
+/// Prompt the user for login credentials for a particular URL.
+///
+/// This uses the askpass helper if configured,
+/// and falls back to prompting on the terminal otherwise.
+///
+/// If a username is already provided, the user is only prompted for a password.
 pub(crate) fn prompt_credentials(username: Option<&str>, url: &str, git_config: &git2::Config) -> Result<PlaintextCredentials, Error> {
 	if let Some(askpass) = askpass_command(git_config) {
 		let username = match username {
@@ -60,6 +86,10 @@ pub(crate) fn prompt_credentials(username: Option<&str>, url: &str, git_config: 
 	}
 }
 
+/// Prompt the user for the password of an encrypted SSH key.
+///
+/// This uses the askpass helper if configured,
+/// and falls back to prompting on the terminal otherwise.
 pub(crate) fn prompt_ssh_key_password(private_key_path: &Path, git_config: &git2::Config) -> Result<String, Error> {
 	if let Some(askpass) = askpass_command(git_config) {
 		askpass_prompt(&askpass, &format!("Password for {}", private_key_path.display()))
@@ -72,6 +102,7 @@ pub(crate) fn prompt_ssh_key_password(private_key_path: &Path, git_config: &git2
 	}
 }
 
+/// Get the configured askpass program, if any.
 fn askpass_command(git_config: &git2::Config) -> Option<PathBuf> {
 	if let Some(command) = std::env::var_os("GIT_ASKPASS") {
 		Some(command.into())
@@ -84,18 +115,19 @@ fn askpass_command(git_config: &git2::Config) -> Option<PathBuf> {
 	}
 }
 
+/// Prompt the user using the given askpass program.
 fn askpass_prompt(program: &Path, prompt: &str) -> Result<String, Error> {
 	let output = std::process::Command::new(program)
 		.arg(prompt)
 		.output()
-		.map_err(Error::Command)?;
+		.map_err(Error::AskpassCommand)?;
 	if output.status.success() {
 		let password = String::from_utf8(output.stdout)
 			.map_err(Error::InvalidUtf8)?;
 		Ok(password)
 	} else {
 		// Do not keep stdout, it could contain a password D:
-		Err(Error::ExitStatus(ExitStatusError {
+		Err(Error::AskpassExitStatus(AskpassExitStatusError {
 			status: output.status,
 			stderr: String::from_utf8(output.stderr),
 		}))
@@ -105,8 +137,8 @@ fn askpass_prompt(program: &Path, prompt: &str) -> Result<String, Error> {
 impl std::fmt::Display for Error {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
 		match self {
-			Self::Command(e) => write!(f, "Failed to run command: {e}"),
-			Self::ExitStatus(e) => write!(f, "{e}"),
+			Self::AskpassCommand(e) => write!(f, "Failed to run askpass command: {e}"),
+			Self::AskpassExitStatus(e) => write!(f, "{e}"),
 			Self::InvalidUtf8(_) => write!(f, "Password contains invalid UTF-8"),
 			Self::OpenTerminal(e) => write!(f, "Failed to open terminal: {e}"),
 			Self::ReadWriteTerminal(e) => write!(f, "Failed to read/write to terminal: {e}"),
@@ -114,8 +146,8 @@ impl std::fmt::Display for Error {
 	}
 }
 
-impl std::fmt::Display for ExitStatusError {
+impl std::fmt::Display for AskpassExitStatusError {
 	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-		write!(f, "program exitted with {}", self.status)
+		write!(f, "Program exitted with {}", self.status)
 	}
 }
