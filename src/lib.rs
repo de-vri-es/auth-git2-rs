@@ -51,6 +51,7 @@ use std::path::{PathBuf, Path};
 
 mod askpass;
 mod base64_decode;
+mod host_pattern;
 mod ssh_key;
 
 #[cfg(feature = "log")]
