@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.4.1 - 2023-09-06
 - [change][minor] Allow using with versions up to `0.18.x` of `git2`.
 
 # Version 0.4.0 - 2023-08-09
