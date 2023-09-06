@@ -105,7 +105,7 @@ fn clone(command: CloneCommand) -> Result<(), ()> {
 	log::info!("Cloning {} into {}", command.repo, local_path.display());
 
 	let auth = auth_git2::GitAuthenticator::default();
-	auth.clone(&command.repo, local_path)
+	auth.clone_repo(&command.repo, local_path)
 		.map_err(|e| log::error!("Failed to clone {}: {}", command.repo, e))?;
 	Ok(())
 }

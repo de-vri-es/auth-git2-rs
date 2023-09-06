@@ -1,3 +1,6 @@
+# Unreleased
+- [change][major] Rename `GitAuthenticator::clone()` to `clone_repo()` to avoid conflict with the `Clone` trait.
+
 # Version 0.4.1 - 2023-09-06
 - [change][minor] Allow using with versions up to `0.18.x` of `git2`.
 

@@ -8,7 +8,7 @@ This crate aims to make it easy.
 In the simplest case, you can create a [`GitAuthenticator`] struct and directly use it for authentication.
 By default, it will enable all supported authentication mechanisms.
 You can get a [`git2::Credentials`] callback for use with any git operation that requires authentication using the [`GitAuthenticator::credentials()`] function.
-Alternatively, you can use a utility function like [`GitAuthenticator::clone()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
+Alternatively, you can use a utility function like [`GitAuthenticator::clone_repo()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
 
 ## Features
 

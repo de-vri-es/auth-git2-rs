@@ -6,7 +6,7 @@
 //! In the simplest case, you can create a [`GitAuthenticator`] struct and directly use it for authentication.
 //! By default, it will enable all supported authentication mechanisms.
 //! You can get a [`git2::Credentials`] callback for use with any git operation that requires authentication using the [`GitAuthenticator::credentials()`] function.
-//! Alternatively, you can use a utility function like [`GitAuthenticator::clone()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
+//! Alternatively, you can use a utility function like [`GitAuthenticator::clone_repo()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
 //!
 //! # Features
 //!
@@ -318,7 +318,7 @@ impl GitAuthenticator {
 	///
 	/// If you need more control over the clone options,
 	/// use [`Self::credentials()`] with a [`git2::build::RepoBuilder`].
-	pub fn clone(&self, url: impl AsRef<str>, into: impl AsRef<Path>) -> Result<git2::Repository, git2::Error> {
+	pub fn clone_repo(&self, url: impl AsRef<str>, into: impl AsRef<Path>) -> Result<git2::Repository, git2::Error> {
 		let url = url.as_ref();
 		let into = into.as_ref();
 
