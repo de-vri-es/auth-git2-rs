@@ -11,7 +11,7 @@ This crate aims to make it easy.
 * Query the SSH agent for private key authentication.
 * Get SSH keys from files.
 * Prompt the user for passwords for encrypted SSH keys.
-** Only supported for OpenSSH private keys.
+    * Only supported for OpenSSH private keys.
 * Query the git credential helper for usernames and passwords.
 * Use pre-provided plain usernames and passwords.
 * Use the git askpass helper to ask the user for credentials.

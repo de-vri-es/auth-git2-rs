@@ -9,7 +9,7 @@
 //! * Query the SSH agent for private key authentication.
 //! * Get SSH keys from files.
 //! * Prompt the user for passwords for encrypted SSH keys.
-//! ** Only supported for OpenSSH private keys.
+//!     * Only supported for OpenSSH private keys.
 //! * Query the git credential helper for usernames and passwords.
 //! * Use pre-provided plain usernames and passwords.
 //! * Use the git askpass helper to ask the user for credentials.
@@ -153,7 +153,7 @@ impl Default for GitAuthenticator {
 impl GitAuthenticator {
 	/// Create a new authenticator with all supported options enabled.
 	///
-	/// This is equavalent to:
+	/// This is equivalent to:
 	/// ```
 	/// # use auth_git2::GitAuthenticator;
 	/// GitAuthenticator::new_empty()

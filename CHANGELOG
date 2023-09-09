@@ -1,3 +1,6 @@
+# Unreleased
+- [change][patch] Fix typo and formatting of nested list in documentation.
+
 # Version 0.5.1 - 2023-09-09
 - [change][patch] Improve library level documentation and README.
 
