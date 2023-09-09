@@ -3,11 +3,6 @@
 //! Authentication with [`git2`] can be quite difficult to implement correctly.
 //! This crate aims to make it easy.
 //!
-//! In the simplest case, you can create a [`GitAuthenticator`] struct and directly use it for authentication.
-//! By default, it will enable all supported authentication mechanisms.
-//! You can get a [`git2::Credentials`] callback for use with any git operation that requires authentication using the [`GitAuthenticator::credentials()`] function.
-//! Alternatively, you can use a utility function like [`GitAuthenticator::clone_repo()`], [`GitAuthenticator::fetch()`] or [`GitAuthenticator::push()`].
-//!
 //! # Features
 //!
 //! * Small dependency tree.
@@ -18,9 +13,50 @@
 //! * Query the git credential helper for usernames and passwords.
 //! * Use pre-provided plain usernames and passwords.
 //! * Use the git askpass helper to ask the user for credentials.
-//! * Fallback to prompting the user on the terminal if there is no `askpass` helper.
+//! * Fallback to prompting the user on the terminal if there is no askpass helper.
 //!
-//! # Example: Clone a repository with authentication
+//! # Creating an authenticator and enabling authentication mechanisms
+//!
+//! You can create use [`GitAuthenticator::new()`] (or [`default()`][`GitAuthenticator::default()`]) to create a ready-to-use authenticator.
+//! Using one of these constructors will enable all supported authentication mechanisms.
+//! You can still add more private key files from non-default locations to try if desired.
+//!
+//! You can also use [`GitAuthenticator::new_empty()`] to create an authenticator without any authentication mechanism enabled.
+//! Then you can selectively enable authentication mechanisms and add custom private key files.
+//! and selectively enable authentication methods or add private key files.
+//!
+//! # Using the authenticator
+//!
+//! For the most flexibility, you can get a [`git2::Credentials`] callback using the [`GitAuthenticator::credentials()`] function.
+//! You can use it with any git operation that requires authentication.
+//! Doing this gives you full control to set other options and callbacks for the git operation.
+//!
+//! If you don't need to set other options or callbacks, you can also use the convenience functions on [`GitAuthenticator`].
+//! They wrap git operations with the credentials callback set:
+//!
+//! * [`GitAuthenticator::clone_repo()`]
+//! * [`GitAuthenticator::fetch()`]
+//! * [`GitAuthenticator::push()`]
+//!
+//! # Example: Clone a repository
+//!
+//! ```no_run
+//! # fn main() -> Result<(), git2::Error> {
+//! use auth_git2::GitAuthenticator;
+//! use std::path::Path;
+//!
+//! let url = "https://github.com/de-vri-es/auth-git2-rs";
+//! let into = Path::new("/tmp/dyfhxoaj/auth-git2-rs");
+//!
+//! let auth = GitAuthenticator::default();
+//! let mut repo = auth.clone_repo(url, into);
+//! # let _ = repo;
+//! # Ok(())
+//! # }
+//! ```
+//!
+//! # Example: Clone a repository with full control over fetch options
+//!
 //! ```no_run
 //! # fn main() -> Result<(), git2::Error> {
 //! use auth_git2::GitAuthenticator;
@@ -106,6 +142,9 @@ pub struct GitAuthenticator {
 }
 
 impl Default for GitAuthenticator {
+	/// Create a new authenticator with all supported options enabled.
+	///
+	/// This is the same as [`GitAuthenticator::new()`].
 	fn default() -> Self {
 		Self::new()
 	}
