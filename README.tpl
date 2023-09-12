@@ -12,3 +12,4 @@
 [`GitAuthenticator::clone_repo()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.clone_repo
 [`GitAuthenticator::fetch()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.fetch
 [`GitAuthenticator::push()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.push
+[`GitAuthenticator::set_prompter()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.set_prompter

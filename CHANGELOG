@@ -1,3 +1,6 @@
+# Unreleased
+- [add][minor] Add support for customizing user prompts with `GitAuthenticator::set_prompter()`.
+
 # Version 0.5.2 - 2023-09-09
 - [change][patch] Fix typo and formatting of nested list in documentation.
 

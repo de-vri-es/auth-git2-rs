@@ -1,7 +1,42 @@
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
-use crate::PlaintextCredentials;
+#[cfg(feature = "log")]
+use crate::log::*;
+
+#[derive(Copy, Clone)]
+pub(crate) struct DefaultPrompter;
+
+impl crate::Prompter for DefaultPrompter {
+	fn prompt_username_password(&mut self, url: &str, git_config: &git2::Config) -> Option<(String, String)> {
+		prompt_username_password(url, git_config)
+			.map_err(|e| log_error("username and password", &e))
+			.ok()
+	}
+
+	fn prompt_password(&mut self, username: &str, url: &str, git_config: &git2::Config) -> Option<String> {
+		prompt_password(username, url, git_config)
+			.map_err(|e| log_error("password", &e))
+			.ok()
+	}
+
+	fn prompt_ssh_key_passphrase(&mut self, private_key_path: &Path, git_config: &git2::Config) -> Option<String> {
+		prompt_ssh_key_passphrase(private_key_path, git_config)
+			.map_err(|e| log_error("SSH key passphrase", &e))
+			.ok()
+	}
+}
+
+fn log_error(kind: &str, error: &Error) {
+	warn!("Failed to prompt the user for {kind}: {error}");
+	if let Error::AskpassExitStatus(error) = error {
+		if let Some(extra_message) = error.extra_message() {
+			for line in extra_message.lines() {
+				warn!("askpass: {line}");
+			}
+		}
+	}
+}
 
 /// Error that can occur when prompting for a password.
 pub enum Error {
@@ -30,18 +65,6 @@ pub struct AskpassExitStatusError {
 	pub stderr: Result<String, std::string::FromUtf8Error>,
 }
 
-impl Error {
-	/// Get the extra error message, if any.
-	///
-	/// This will give the standard error of the askpass process if it exited with an error.
-	pub fn extra_message(&self) -> Option<&str> {
-		match self {
-			Self::AskpassExitStatus(e) => e.extra_message(),
-			_ => None,
-		}
-	}
-}
-
 impl AskpassExitStatusError {
 	/// Get the extra error message, if any.
 	///
@@ -51,38 +74,44 @@ impl AskpassExitStatusError {
 	}
 }
 
-/// Prompt the user for login credentials for a particular URL.
+/// Prompt the user for a username and password for a particular URL.
 ///
 /// This uses the askpass helper if configured,
 /// and falls back to prompting on the terminal otherwise.
-///
-/// If a username is already provided, the user is only prompted for a password.
-pub(crate) fn prompt_credentials(username: Option<&str>, url: &str, git_config: &git2::Config) -> Result<PlaintextCredentials, Error> {
+fn prompt_username_password(url: &str, git_config: &git2::Config) -> Result<(String, String), Error> {
 	if let Some(askpass) = askpass_command(git_config) {
-		let username = match username {
-			Some(x) => x.into(),
-			None => askpass_prompt(&askpass, &format!("Username for {url}"))?,
-		};
+		let username = askpass_prompt(&askpass, &format!("Username for {url}"))?;
 		let password = askpass_prompt(&askpass, &format!("Password for {url}"))?;
-		Ok(PlaintextCredentials {
-			username,
-			password,
-		})
+		Ok((username, password))
 	} else {
 		let mut terminal = terminal_prompt::Terminal::open()
 			.map_err(Error::OpenTerminal)?;
 		writeln!(terminal, "Authentication needed for {url}")
 			.map_err(Error::ReadWriteTerminal)?;
-		let username = match username {
-			Some(x) => x.into(),
-			None => terminal.prompt("Username: ").map_err(Error::ReadWriteTerminal)?,
-		};
+		let username = terminal.prompt("Username: ")
+			.map_err(Error::ReadWriteTerminal)?;
 		let password = terminal.prompt_sensitive("Password: ")
 			.map_err(Error::ReadWriteTerminal)?;
-		Ok(PlaintextCredentials {
-			username,
-			password,
-		})
+		Ok((username, password))
+	}
+}
+
+/// Prompt the user for a password for a particular URL and username.
+///
+/// This uses the askpass helper if configured,
+/// and falls back to prompting on the terminal otherwise.
+fn prompt_password(_username: &str, url: &str, git_config: &git2::Config) -> Result<String, Error> {
+	if let Some(askpass) = askpass_command(git_config) {
+		let password = askpass_prompt(&askpass, &format!("Password for {url}"))?;
+		Ok(password)
+	} else {
+		let mut terminal = terminal_prompt::Terminal::open()
+			.map_err(Error::OpenTerminal)?;
+		writeln!(terminal, "Authentication needed for {url}")
+			.map_err(Error::ReadWriteTerminal)?;
+		let password = terminal.prompt_sensitive("Password: ")
+			.map_err(Error::ReadWriteTerminal)?;
+		Ok(password)
 	}
 }
 
@@ -90,7 +119,7 @@ pub(crate) fn prompt_credentials(username: Option<&str>, url: &str, git_config: 
 ///
 /// This uses the askpass helper if configured,
 /// and falls back to prompting on the terminal otherwise.
-pub(crate) fn prompt_ssh_key_password(private_key_path: &Path, git_config: &git2::Config) -> Result<String, Error> {
+fn prompt_ssh_key_passphrase(private_key_path: &Path, git_config: &git2::Config) -> Result<String, Error> {
 	if let Some(askpass) = askpass_command(git_config) {
 		askpass_prompt(&askpass, &format!("Password for {}", private_key_path.display()))
 	} else {
@@ -98,7 +127,8 @@ pub(crate) fn prompt_ssh_key_password(private_key_path: &Path, git_config: &git2
 			.map_err(Error::OpenTerminal)?;
 		writeln!(terminal, "Password needed for {}", private_key_path.display())
 			.map_err(Error::ReadWriteTerminal)?;
-		terminal.prompt_sensitive("Password: ").map_err(Error::ReadWriteTerminal)
+		terminal.prompt_sensitive("Password: ")
+			.map_err(Error::ReadWriteTerminal)
 	}
 }
 
@@ -139,7 +169,7 @@ impl std::fmt::Display for Error {
 		match self {
 			Self::AskpassCommand(e) => write!(f, "Failed to run askpass command: {e}"),
 			Self::AskpassExitStatus(e) => write!(f, "{e}"),
-			Self::InvalidUtf8(_) => write!(f, "Password contains invalid UTF-8"),
+			Self::InvalidUtf8(_) => write!(f, "User response contains invalid UTF-8"),
 			Self::OpenTerminal(e) => write!(f, "Failed to open terminal: {e}"),
 			Self::ReadWriteTerminal(e) => write!(f, "Failed to read/write to terminal: {e}"),
 		}
