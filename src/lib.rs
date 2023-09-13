@@ -689,4 +689,13 @@ mod test {
 		assert!(let None = domain_from_url("some/relative/path"));
 		assert!(let None = domain_from_url("some/relative/path@with-at-sign"));
 	}
+
+	#[test]
+	fn test_that_authenticator_is_send() {
+		let authenticator = GitAuthenticator::new();
+		let thread = std::thread::spawn(move || {
+			drop(authenticator);
+		});
+		thread.join().unwrap();
+	}
 }
