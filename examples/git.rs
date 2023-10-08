@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 #[derive(clap::Parser)]
 struct Options {
@@ -100,7 +100,7 @@ fn do_main(options: Options) -> Result<(), ()> {
 
 fn clone(command: CloneCommand) -> Result<(), ()> {
 	let local_path = command.local_path.as_deref()
-		.unwrap_or_else(|| repo_name_from_url(&command.repo).as_ref());
+		.unwrap_or_else(|| Path::new(repo_name_from_url(&command.repo)));
 
 	log::info!("Cloning {} into {}", command.repo, local_path.display());
 
@@ -140,6 +140,7 @@ fn push(command: PushCommand) -> Result<(), ()> {
 }
 
 fn repo_name_from_url(url: &str) -> &str {
-	let (_head, tail) = url.rsplit_once('/').unwrap_or(("", url));
-	tail
+	url.rsplit_once('/')
+		.map(|(_head, tail)| tail)
+		.unwrap_or(url)
 }

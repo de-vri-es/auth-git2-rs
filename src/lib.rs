@@ -5,15 +5,20 @@
 //!
 //! # Features
 //!
-//! * Small dependency tree.
-//! * Query the SSH agent for private key authentication.
-//! * Get SSH keys from files.
-//! * Prompt the user for passwords for encrypted SSH keys.
+//! * Has a small dependency tree.
+//! * Can query the SSH agent for private key authentication.
+//! * Can get SSH keys from files.
+//! * Can prompt the user for passwords for encrypted SSH keys.
 //!     * Only supported for OpenSSH private keys.
-//! * Query the git credential helper for usernames and passwords.
-//! * Use pre-provided plain usernames and passwords.
-//! * Use the git askpass helper to ask the user for credentials.
-//! * Fallback to prompting the user on the terminal if there is no askpass helper.
+//! * Can query the git credential helper for usernames and passwords.
+//! * Can use pre-provided plain usernames and passwords.
+//! * Can prompt the user for credentials as a last resort.
+//! * Allows you to fully customize all user prompts.
+//!
+//! The default user prompts will:
+//! * Use the git `askpass` helper if it is configured.
+//! * Fall back to prompting the user on the terminal if there is no `askpass` program configured.
+//! * Skip the prompt if there is also no terminal available for the process.
 //!
 //! # Creating an authenticator and enabling authentication mechanisms
 //!
@@ -23,7 +28,6 @@
 //!
 //! You can also use [`GitAuthenticator::new_empty()`] to create an authenticator without any authentication mechanism enabled.
 //! Then you can selectively enable authentication mechanisms and add custom private key files.
-//! and selectively enable authentication methods or add private key files.
 //!
 //! # Using the authenticator
 //!
@@ -37,6 +41,13 @@
 //! * [`GitAuthenticator::clone_repo()`]
 //! * [`GitAuthenticator::fetch()`]
 //! * [`GitAuthenticator::push()`]
+//!
+//! # Customizing user prompts
+//!
+//! All user prompts can be fully customized by calling [`GitAuthenticator::set_prompter()`].
+//! This allows you to override the way that the user is prompted for credentials or passphrases.
+//!
+//! If you have a fancy user interface, you can use a custom prompter to integrate the prompts with your user interface.
 //!
 //! # Example: Clone a repository
 //!
@@ -85,10 +96,6 @@
 use std::collections::BTreeMap;
 use std::path::{PathBuf, Path};
 
-mod askpass;
-mod base64_decode;
-mod ssh_key;
-
 #[cfg(feature = "log")]
 mod log {
 	pub use ::log::warn;
@@ -115,9 +122,15 @@ mod log {
 	}
 }
 
+mod base64_decode;
+mod default_prompt;
+mod prompter;
+mod ssh_key;
+
+pub use prompter::Prompter;
 
 /// Configurable authenticator to use with [`git2`].
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GitAuthenticator {
 	/// Map of domain names to plaintext credentials.
 	plaintext_credentials: BTreeMap<String, PlaintextCredentials>,
@@ -139,6 +152,23 @@ pub struct GitAuthenticator {
 
 	/// Prompt for passwords for encrypted SSH keys.
 	prompt_ssh_key_password: bool,
+
+	/// Custom prompter to use.
+	prompter: Box<dyn prompter::ClonePrompter>,
+}
+
+impl std::fmt::Debug for GitAuthenticator {
+	fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+		f.debug_struct("GitAuthenticator")
+			.field("plaintext_credentials", &self.plaintext_credentials)
+			.field("try_cred_helper", &self.try_cred_helper)
+			.field("try_password_prompt", &self.try_password_prompt)
+			.field("usernames", &self.usernames)
+			.field("try_ssh_agent", &self.try_ssh_agent)
+			.field("ssh_keys", &self.ssh_keys)
+			.field("prompt_ssh_key_password", &self.prompt_ssh_key_password)
+			.finish()
+	}
 }
 
 impl Default for GitAuthenticator {
@@ -185,6 +215,7 @@ impl GitAuthenticator {
 			usernames: BTreeMap::new(),
 			ssh_keys: Vec::new(),
 			prompt_ssh_key_password: false,
+			prompter: prompter::wrap_prompter(default_prompt::DefaultPrompter),
 		}
 	}
 
@@ -212,24 +243,45 @@ impl GitAuthenticator {
 
 	/// Configure the number of times we should prompt the user for a username/password.
 	///
-	/// Set to `0` to disable.
+	/// Setting this value to `0` disables password prompts.
 	///
-	/// If an askpass helper is configured, it will be used.
-	/// Otherwise, the user will be prompted directly on the main terminal of the process.
+	/// By default, if an `askpass` helper is configured, it will be used for the prompts.
+	/// Otherwise, the user will be prompted directly on the terminal of the current process.
+	/// If there is also no terminal available, the prompt is skipped.
 	///
-	/// An askpass helper can be configured in the `GIT_ASKPASS` environment variable,
+	/// An `askpass` helper can be configured in the `GIT_ASKPASS` environment variable,
 	/// the `core.askPass` configuration value or the `SSH_ASKPASS` environment variable.
+	///
+	/// You can override the prompt behaviour by calling [`Self::set_prompter()`].
 	pub fn try_password_prompt(mut self, max_count: u32) -> Self {
 		self.try_password_prompt = max_count;
 		self
 	}
 
-	/// Add a username to try for authentication.
+	/// Use a custom [`Prompter`] to prompt the user for credentials and passphrases.
 	///
-	/// Some authentication mechanisms need a username, but not all valid `git` URLs specify one.
+	/// If you set a custom prompter,
+	/// the authenticator will no longer try to use the `askpass` helper or prompt the user on the terminal.
+	/// Instead, the provided prompter will be called.
+	///
+	/// Note that prompts must still be enabled with [`Self::try_password_prompt()`] and [`Self::prompt_ssh_key_password()`].
+	/// If prompts are disabled, your custom prompter will not be called.
+	///
+	/// You can use this function to integrate the prompts with your own user interface
+	/// or simply to tweak the way the user is prompted on the terminal.
+	///
+	/// A unique clone of the prompter will be used for each [`git2::Credentials`] callback returned by [`Self::credentials()`].
+	pub fn set_prompter<P: Prompter + Clone + Send + 'static>(mut self, prompter: P) -> Self {
+		self.prompter = prompter::wrap_prompter(prompter);
+		self
+	}
+
+	/// Add a username to try for authentication for a specific domain.
+	///
+	/// Some authentication mechanisms need a username, but not all valid git URLs specify one.
 	/// You can add one or more usernames to try in that situation.
 	///
-	/// You can use the special domain name "*" to set the username for all domains without a specific username set.
+	/// You can use the special domain name "*" to set a fallback username for domains that do not have a specific username set.
 	pub fn add_username(mut self, domain: impl Into<String>, username: impl Into<String>) -> Self {
 		let domain = domain.into();
 		let username = username.into();
@@ -248,7 +300,7 @@ impl GitAuthenticator {
 		}
 	}
 
-	/// Configure if the SSH agent should be user for public key authentication.
+	/// Configure if the SSH agent should be used for public key authentication.
 	pub fn try_ssh_agent(mut self, enable: bool) -> Self {
 		self.try_ssh_agent = enable;
 		self
@@ -260,8 +312,8 @@ impl GitAuthenticator {
 	///
 	/// You can provide a password for decryption of the private key.
 	/// If no password is provided and the `Self::prompt_ssh_key_password()` is enabled,
-	/// a password prompt will be shown on the terminal if needed to ask for the encryption key.
-	/// Note that we currently only support the `OpenSSH` private key format for detecting that a key is encrypted.
+	/// the user will be prompted for the passphrase of encrypted keys.
+	/// Note that currently only the `OpenSSH` private key format is supported for detecting that a key is encrypted.
 	///
 	/// A matching `.pub` file will also be read if it exists.
 	/// For example, if you add the private key `"foo/my_ssh_id"`,
@@ -283,11 +335,11 @@ impl GitAuthenticator {
 	/// This will add all of the following files, if they exist:
 	///
 	/// * `"$HOME/.ssh/id_rsa"`
-	/// * `"$HOME/.ssh"id_ecdsa,"`
-	/// * `"$HOME/.ssh"id_ecdsa_sk"`
-	/// * `"$HOME/.ssh"id_ed25519"`
-	/// * `"$HOME/.ssh"id_ed25519_sk"`
-	/// * `"$HOME/.ssh"id_dsa"`
+	/// * `"$HOME/.ssh/id_ecdsa"`
+	/// * `"$HOME/.ssh/id_ecdsa_sk"`
+	/// * `"$HOME/.ssh/id_ed25519"`
+	/// * `"$HOME/.ssh/id_ed25519_sk"`
+	/// * `"$HOME/.ssh/id_dsa"`
 	pub fn add_default_ssh_keys(mut self) -> Self {
 		let ssh_dir = match dirs::home_dir() {
 			Some(x) => x.join(".ssh"),
@@ -316,11 +368,14 @@ impl GitAuthenticator {
 
 	/// Prompt for passwords for encrypted SSH keys if needed.
 	///
-	/// If an askpass helper is configured, it will be used.
-	/// Otherwise, the user will be prompted directly on the main terminal of the process.
+	/// By default, if an `askpass` helper is configured, it will be used for the prompts.
+	/// Otherwise, the user will be prompted directly on the terminal of the current process.
+	/// If there is also no terminal available, the prompt is skipped.
 	///
-	/// An askpass helper can be configured in the `GIT_ASKPASS` environment variable,
+	/// An `askpass` helper can be configured in the `GIT_ASKPASS` environment variable,
 	/// the `core.askPass` configuration value or the `SSH_ASKPASS` environment variable.
+	///
+	/// You can override the prompt behaviour by calling [`Self::set_prompter()`].
 	pub fn prompt_ssh_key_password(mut self, enable: bool) -> Self {
 		self.prompt_ssh_key_password = enable;
 		self
@@ -432,6 +487,7 @@ fn make_credentials_callback<'a>(
 	let mut try_password_prompt = authenticator.try_password_prompt;
 	let mut try_ssh_agent = authenticator.try_ssh_agent;
 	let mut ssh_keys = authenticator.ssh_keys.iter();
+	let mut prompter = authenticator.prompter.clone();
 
 	move |url: &str, username: Option<&str>, allowed: git2::CredentialType| {
 		trace!("credentials callback called with url: {url:?}, username: {username:?}, allowed_credentials: {allowed:?}");
@@ -470,7 +526,9 @@ fn make_credentials_callback<'a>(
 				#[allow(clippy::while_let_on_iterator)] // Incorrect lint: we're not consuming the iterator.
 				while let Some(key) = ssh_keys.next() {
 					debug!("credentials_callback: trying ssh key, username: {username:?}, private key: {:?}", key.private_key);
-					match key.to_credentials(username, authenticator.prompt_ssh_key_password, git_config) {
+					let prompter = Some(prompter.as_prompter_mut())
+						.filter(|_| authenticator.prompt_ssh_key_password);
+					match key.to_credentials(username, prompter, git_config) {
 						Ok(x) => return Ok(x),
 						Err(e) => debug!("credentials_callback: failed to use SSH key from file {:?}: {e}", key.private_key),
 					}
@@ -505,19 +563,14 @@ fn make_credentials_callback<'a>(
 			// Prompt the user on the terminal.
 			if try_password_prompt > 0 {
 				try_password_prompt -= 1;
-				match askpass::prompt_credentials(username, url, git_config) {
-					Err(e) => {
-						warn!("Failed to prompt for credentials from terminal: {e}");
-						if let Some(extra_message) = e.extra_message() {
-							for line in extra_message.lines() {
-								warn!("askpass: {line}");
-							}
-						}
-					},
-					Ok(credentials) => {
-						debug!("credentials_callback: trying plain text credentials from the terminal with username: {:?}", credentials.username);
-						return credentials.to_credentials();
-					},
+				let credentials = PlaintextCredentials::prompt(
+					prompter.as_prompter_mut(),
+					username,
+					url,
+					git_config
+				);
+				if let Some(credentials) = credentials {
+					return credentials.to_credentials();
 				}
 			}
 		}
@@ -534,12 +587,10 @@ struct PrivateKeyFile {
 }
 
 impl PrivateKeyFile {
-	fn to_credentials(&self, username: &str, prompt: bool, git_config: &git2::Config) -> Result<git2::Cred, git2::Error> {
+	fn to_credentials(&self, username: &str, prompter: Option<&mut dyn Prompter>, git_config: &git2::Config) -> Result<git2::Cred, git2::Error> {
 		if let Some(password) = &self.password {
 			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, Some(password))
-		} else if !prompt {
-			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, None)
-		} else {
+		} else if let Some(prompter) = prompter {
 			let password = match ssh_key::analyze_ssh_key_file(&self.private_key) {
 				Err(e) => {
 					warn!("Failed to analyze SSH key: {}: {}", self.private_key.display(), e);
@@ -547,23 +598,15 @@ impl PrivateKeyFile {
 				},
 				Ok(key_info) => {
 					if key_info.encrypted {
-						match askpass::prompt_ssh_key_password(&self.private_key, git_config) {
-							Ok(x) => Some(x),
-							Err(e) => {
-								if let Some(extra_message) = e.extra_message() {
-									for line in extra_message.lines() {
-										warn!("askpass: {line}");
-									}
-								}
-								None
-							},
-						}
+						prompter.prompt_ssh_key_passphrase(&self.private_key, git_config)
 					} else {
 						None
 					}
 				},
 			};
 			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, password.as_deref())
+		} else {
+			git2::Cred::ssh_key(username, self.public_key.as_deref(), &self.private_key, None)
 		}
 	}
 }
@@ -575,6 +618,22 @@ struct PlaintextCredentials {
 }
 
 impl PlaintextCredentials {
+	fn prompt(prompter: &mut dyn Prompter, username: Option<&str>, url: &str, git_config: &git2::Config) -> Option<Self> {
+		if let Some(username) = username {
+			let password = prompter.prompt_password(username, url, git_config)?;
+			Some(Self {
+				username: username.into(),
+				password,
+			})
+		} else {
+			let (username, password) = prompter.prompt_username_password(url, git_config)?;
+			Some(Self {
+				username,
+				password,
+			})
+		}
+	}
+
 	fn to_credentials(&self) -> Result<git2::Cred, git2::Error> {
 		git2::Cred::userpass_plaintext(&self.username, &self.password)
 	}
@@ -629,5 +688,14 @@ mod test {
 
 		assert!(let None = domain_from_url("some/relative/path"));
 		assert!(let None = domain_from_url("some/relative/path@with-at-sign"));
+	}
+
+	#[test]
+	fn test_that_authenticator_is_send() {
+		let authenticator = GitAuthenticator::new();
+		let thread = std::thread::spawn(move || {
+			drop(authenticator);
+		});
+		thread.join().unwrap();
 	}
 }

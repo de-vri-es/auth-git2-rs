@@ -7,15 +7,20 @@ This crate aims to make it easy.
 
 ## Features
 
-* Small dependency tree.
-* Query the SSH agent for private key authentication.
-* Get SSH keys from files.
-* Prompt the user for passwords for encrypted SSH keys.
+* Has a small dependency tree.
+* Can query the SSH agent for private key authentication.
+* Can get SSH keys from files.
+* Can prompt the user for passwords for encrypted SSH keys.
     * Only supported for OpenSSH private keys.
-* Query the git credential helper for usernames and passwords.
-* Use pre-provided plain usernames and passwords.
-* Use the git askpass helper to ask the user for credentials.
-* Fallback to prompting the user on the terminal if there is no askpass helper.
+* Can query the git credential helper for usernames and passwords.
+* Can use pre-provided plain usernames and passwords.
+* Can prompt the user for credentials as a last resort.
+* Allows you to fully customize all user prompts.
+
+The default user prompts will:
+* Use the git `askpass` helper if it is configured.
+* Fall back to prompting the user on the terminal if there is no `askpass` program configured.
+* Skip the prompt if there is also no terminal available for the process.
 
 ## Creating an authenticator and enabling authentication mechanisms
 
@@ -25,7 +30,6 @@ You can still add more private key files from non-default locations to try if de
 
 You can also use [`GitAuthenticator::new_empty()`] to create an authenticator without any authentication mechanism enabled.
 Then you can selectively enable authentication mechanisms and add custom private key files.
-and selectively enable authentication methods or add private key files.
 
 ## Using the authenticator
 
@@ -39,6 +43,13 @@ They wrap git operations with the credentials callback set:
 * [`GitAuthenticator::clone_repo()`]
 * [`GitAuthenticator::fetch()`]
 * [`GitAuthenticator::push()`]
+
+## Customizing user prompts
+
+All user prompts can be fully customized by calling [`GitAuthenticator::set_prompter()`].
+This allows you to override the way that the user is prompted for credentials or passphrases.
+
+If you have a fancy user interface, you can use a custom prompter to integrate the prompts with your user interface.
 
 ## Example: Clone a repository
 
@@ -84,3 +95,4 @@ let mut repo = repo_builder.clone(url, into);
 [`GitAuthenticator::clone_repo()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.clone_repo
 [`GitAuthenticator::fetch()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.fetch
 [`GitAuthenticator::push()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.push
+[`GitAuthenticator::set_prompter()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.set_prompter
