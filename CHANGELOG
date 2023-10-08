@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.5.3 - 2023-10-08
 - [add][minor] Add support for customizing user prompts with `GitAuthenticator::set_prompter()`.
 
 # Version 0.5.2 - 2023-09-09
