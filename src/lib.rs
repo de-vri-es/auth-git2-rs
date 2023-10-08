@@ -45,9 +45,9 @@
 //! # Customizing user prompts
 //!
 //! All user prompts can be fully customized by calling [`GitAuthenticator::set_prompter()`].
-//! This allows you to tweak the way that the user is prompted on the terminal.
+//! This allows you to override the way that the user is prompted for credentials or passphrases.
 //!
-//! If you have a fancy user interface, you can also use a custom prompter to integrate the prompts with your user interface.
+//! If you have a fancy user interface, you can use a custom prompter to integrate the prompts with your user interface.
 //!
 //! # Example: Clone a repository
 //!
