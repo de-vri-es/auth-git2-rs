@@ -458,6 +458,7 @@ impl GitAuthenticator {
 		remote.download(refspecs, Some(&mut fetch_options))
 	}
 
+
 	/// Push to a remote using the git authenticator.
 	///
 	/// If you need more control over the push options,
