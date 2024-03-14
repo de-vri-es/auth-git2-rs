@@ -448,7 +448,7 @@ impl GitAuthenticator {
 	///
 	/// If you need more control over the download options,
 	/// use [`Self::credentials()`] with a [`git2::Remote::download`].
-	pub fn download(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str], _reflog_msg: Option<&str>) -> Result<(), git2::Error> {
+	pub fn download(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str]) -> Result<(), git2::Error> {
 		let git_config = repo.config()?;
 		let mut fetch_options = git2::FetchOptions::new();
 		let mut remote_callbacks = git2::RemoteCallbacks::new();
