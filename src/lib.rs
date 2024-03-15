@@ -443,6 +443,22 @@ impl GitAuthenticator {
 		remote.fetch(refspecs, Some(&mut fetch_options), reflog_msg)
 	}
 
+
+	/// Download from a remote using the git authenticator.
+	///
+	/// If you need more control over the download options,
+	/// use [`Self::credentials()`] with a [`git2::Remote::download`].
+	pub fn download(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str]) -> Result<(), git2::Error> {
+		let git_config = repo.config()?;
+		let mut fetch_options = git2::FetchOptions::new();
+		let mut remote_callbacks = git2::RemoteCallbacks::new();
+
+		remote_callbacks.credentials(self.credentials(&git_config));
+		fetch_options.remote_callbacks(remote_callbacks);
+		remote.download(refspecs, Some(&mut fetch_options))
+	}
+
+
 	/// Push to a remote using the git authenticator.
 	///
 	/// If you need more control over the push options,

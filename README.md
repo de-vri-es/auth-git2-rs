@@ -43,6 +43,7 @@ They wrap git operations with the credentials callback set:
 * [`GitAuthenticator::clone_repo()`]
 * [`GitAuthenticator::fetch()`]
 * [`GitAuthenticator::push()`]
+* [`GitAuthenticator::download()`]
 
 ## Customizing user prompts
 
@@ -95,4 +96,5 @@ let mut repo = repo_builder.clone(url, into);
 [`GitAuthenticator::clone_repo()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.clone_repo
 [`GitAuthenticator::fetch()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.fetch
 [`GitAuthenticator::push()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.push
+[`GitAuthenticator::download()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.download
 [`GitAuthenticator::set_prompter()`]: https://docs.rs/auth-git2/latest/auth_git2/struct.GitAuthenticator.html#method.set_prompter
