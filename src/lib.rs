@@ -40,6 +40,7 @@
 //!
 //! * [`GitAuthenticator::clone_repo()`]
 //! * [`GitAuthenticator::fetch()`]
+//! * [`GitAuthenticator::download()`]
 //! * [`GitAuthenticator::push()`]
 //!
 //! # Customizing user prompts
@@ -432,7 +433,7 @@ impl GitAuthenticator {
 	/// Fetch from a remote using the git authenticator.
 	///
 	/// If you need more control over the fetch options,
-	/// use [`Self::credentials()`] with a [`git2::Remote::fetch`].
+	/// use [`Self::credentials()`] with [`git2::Remote::fetch()`].
 	pub fn fetch(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str], reflog_msg: Option<&str>) -> Result<(), git2::Error> {
 		let git_config = repo.config()?;
 		let mut fetch_options = git2::FetchOptions::new();
@@ -443,11 +444,13 @@ impl GitAuthenticator {
 		remote.fetch(refspecs, Some(&mut fetch_options), reflog_msg)
 	}
 
-
-	/// Download from a remote using the git authenticator.
+	/// Download and index the packfile from a remote using the git authenticator.
 	///
 	/// If you need more control over the download options,
-	/// use [`Self::credentials()`] with a [`git2::Remote::download`].
+	/// use [`Self::credentials()`] with [`git2::Remote::download()`].
+	///
+	/// This function does not update the remote tracking branches.
+	/// Consider using [`Self::fetch()`] if that is what you want.
 	pub fn download(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str]) -> Result<(), git2::Error> {
 		let git_config = repo.config()?;
 		let mut fetch_options = git2::FetchOptions::new();
@@ -458,11 +461,10 @@ impl GitAuthenticator {
 		remote.download(refspecs, Some(&mut fetch_options))
 	}
 
-
 	/// Push to a remote using the git authenticator.
 	///
 	/// If you need more control over the push options,
-	/// use [`Self::credentials()`] with a [`git2::Remote::push`].
+	/// use [`Self::credentials()`] with [`git2::Remote::push()`].
 	pub fn push(&self, repo: &git2::Repository, remote: &mut git2::Remote, refspecs: &[&str]) -> Result<(), git2::Error> {
 		let git_config = repo.config()?;
 		let mut push_options = git2::PushOptions::new();

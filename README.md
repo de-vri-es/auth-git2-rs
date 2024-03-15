@@ -42,8 +42,8 @@ They wrap git operations with the credentials callback set:
 
 * [`GitAuthenticator::clone_repo()`]
 * [`GitAuthenticator::fetch()`]
-* [`GitAuthenticator::push()`]
 * [`GitAuthenticator::download()`]
+* [`GitAuthenticator::push()`]
 
 ## Customizing user prompts
 
