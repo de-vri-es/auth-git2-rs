@@ -1,3 +1,6 @@
+# Unreleased
+- [add][minor] Add support for `git2` version `0.19`.
+
 # Version 0.5.4 - 2024-03-15
 - [add][minor] Add the `GitAuthenticator::download()` convenience function.
 
@@ -14,13 +17,13 @@
 - [change][major] Rename `GitAuthenticator::clone()` to `clone_repo()` to avoid conflict with the `Clone` trait.
 
 # Version 0.4.1 - 2023-09-06
-- [change][minor] Allow using with versions up to `0.18.x` of `git2`.
+- [add][minor] Add support for `git2` version `0.18`.
 
 # Version 0.4.0 - 2023-08-09
 - [change][major] Accept any `impl Into<PathBuf>` in `GitAuthenticator::add_ssh_key_from_file()`.
 
 # Version 0.3.3 - 2023-08-09
-- [change][patch] Allow using with versions `0.14.x` through `0.17.x` of `git2`.
+- [add][minor] Support `git2` versions `0.14`, `0.15`, `0.16` and `0.17`.
 
 # Version 0.3.2 - 2023-08-09
 - [change][patch] Document that the `askpass` helper will be used for prompts, if available.
