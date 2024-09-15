@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.5.5 - 2024-09-15
 - [add][minor] Add support for `git2` version `0.19`.
 
 # Version 0.5.4 - 2024-03-15
