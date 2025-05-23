@@ -1,4 +1,4 @@
-# Unreleased
+# Version 0.5.8 - 2025-05-23
 - [fix][minor] Fix loading of default ECDSA key.
 - [add][patch] Log a warning when processing a private key in unknown format.
 
