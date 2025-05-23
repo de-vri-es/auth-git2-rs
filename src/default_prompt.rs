@@ -47,7 +47,7 @@ pub enum Error {
 	AskpassExitStatus(AskpassExitStatusError),
 
 	/// Password contains invalid UTF-8.
-	InvalidUtf8(std::string::FromUtf8Error),
+	InvalidUtf8,
 
 	/// Failed to open a handle to the main terminal of the process.
 	OpenTerminal(std::io::Error),
@@ -153,7 +153,7 @@ fn askpass_prompt(program: &Path, prompt: &str) -> Result<String, Error> {
 		.map_err(Error::AskpassCommand)?;
 	if output.status.success() {
 		let password = String::from_utf8(output.stdout)
-			.map_err(Error::InvalidUtf8)?;
+			.map_err(|_| Error::InvalidUtf8)?;
 		Ok(password)
 	} else {
 		// Do not keep stdout, it could contain a password D:
@@ -169,7 +169,7 @@ impl std::fmt::Display for Error {
 		match self {
 			Self::AskpassCommand(e) => write!(f, "Failed to run askpass command: {e}"),
 			Self::AskpassExitStatus(e) => write!(f, "{e}"),
-			Self::InvalidUtf8(_) => write!(f, "User response contains invalid UTF-8"),
+			Self::InvalidUtf8 => write!(f, "User response contains invalid UTF-8"),
 			Self::OpenTerminal(e) => write!(f, "Failed to open terminal: {e}"),
 			Self::ReadWriteTerminal(e) => write!(f, "Failed to read/write to terminal: {e}"),
 		}
