@@ -34,9 +34,6 @@ pub(crate) trait ClonePrompter: Prompter {
 	fn dyn_clone(&self) -> Box<dyn ClonePrompter>;
 
 	/// Get `self` as plain `Prompter`.
-	fn as_prompter(&self) -> &dyn Prompter;
-
-	/// Get `self` as plain `Prompter`.
 	fn as_prompter_mut(&mut self) -> &mut dyn Prompter;
 }
 
@@ -47,10 +44,6 @@ where
 {
 	fn dyn_clone(&self) -> Box<dyn ClonePrompter> {
 		Box::new(self.clone())
-	}
-
-	fn as_prompter(&self) -> &dyn Prompter {
-		self
 	}
 
 	fn as_prompter_mut(&mut self) -> &mut dyn Prompter {
