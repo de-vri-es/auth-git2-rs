@@ -615,6 +615,9 @@ impl PrivateKeyFile {
 					None
 				},
 				Ok(key_info) => {
+					if key_info.format == ssh_key::KeyFormat::Unknown {
+						warn!("Unknown key format for key: {}", self.private_key.display());
+					}
 					if key_info.encrypted {
 						prompter.prompt_ssh_key_passphrase(&self.private_key, git_config)
 					} else {

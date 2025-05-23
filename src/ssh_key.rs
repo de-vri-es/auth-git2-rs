@@ -22,6 +22,7 @@ pub enum Error {
 }
 
 /// The format of a key file.
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum KeyFormat {
 	/// We don't know what format it is.
 	Unknown,
