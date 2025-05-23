@@ -349,7 +349,7 @@ impl GitAuthenticator {
 
 		let candidates = [
 			"id_rsa",
-			"id_ecdsa,",
+			"id_ecdsa",
 			"id_ecdsa_sk",
 			"id_ed25519",
 			"id_ed25519_sk",
