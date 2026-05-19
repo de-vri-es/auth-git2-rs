@@ -1,5 +1,5 @@
 # Unreleased
-- [add][minor] Add support for `git2` version `0.21`.
+- [change][major] Raise minimum version of `git2` to version `0.21`.
 
 # Version 0.5.8 - 2025-05-23
 - [fix][minor] Fix loading of default ECDSA key.

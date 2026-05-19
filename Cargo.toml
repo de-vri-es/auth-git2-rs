@@ -17,7 +17,7 @@ log = ["dep:log"]
 
 [dependencies]
 dirs = "6.0.0"
-git2 = { version = ">0.14, <22.0", default-features = false, features = ["cred"] }
+git2 = { version = ">=0.21, <0.22", default-features = false, features = ["cred"] }
 log = { version = "0.4.19", optional = true }
 terminal-prompt = "0.2.2"
 
