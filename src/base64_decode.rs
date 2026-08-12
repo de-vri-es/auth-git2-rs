@@ -100,11 +100,11 @@ mod test {
 
 	#[test]
 	fn test_decode_base64() {
-		assert!(let Ok(b"0") = base64_decode(b"MA").as_deref());
-		assert!(let Ok(b"0") = base64_decode(b"MA=").as_deref());
-		assert!(let Ok(b"0") = base64_decode(b"MA==").as_deref());
-		assert!(let Ok(b"aap noot mies") = base64_decode(b"YWFwIG5vb3QgbWllcw").as_deref());
-		assert!(let Ok(b"aap noot mies") = base64_decode(b"YWFwIG5vb3QgbWllcw=").as_deref());
-		assert!(let Ok(b"aap noot mies") = base64_decode(b"YWFwIG5vb3QgbWllcw==").as_deref());
+		assert!(let Ok(decoded) = base64_decode(b"MA") && decoded == b"0");
+		assert!(let Ok(decoded) = base64_decode(b"MA=") && decoded == b"0");
+		assert!(let Ok(decoded) = base64_decode(b"MA==") && decoded == b"0");
+		assert!(let Ok(decoded) = base64_decode(b"YWFwIG5vb3QgbWllcw") && decoded == b"aap noot mies");
+		assert!(let Ok(decoded) = base64_decode(b"YWFwIG5vb3QgbWllcw=") && decoded == b"aap noot mies");
+		assert!(let Ok(decoded) = base64_decode(b"YWFwIG5vb3QgbWllcw==") && decoded == b"aap noot mies");
 	}
 }
