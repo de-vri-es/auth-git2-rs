@@ -9,6 +9,7 @@ documentation = "https://docs.rs/auth-git2"
 keywords = ["git", "auth", "credentials", "git2", "authentication"]
 categories = ["authentication"]
 
+rust-version = "1.56"
 edition = "2021"
 publish = ["crates-io"]
 

@@ -133,13 +133,14 @@ fn prompt_ssh_key_passphrase(private_key_path: &Path, git_config: &git2::Config)
 }
 
 /// Get the configured askpass program, if any.
+#[allow(clippy::manual_map)] // This looks better.
 fn askpass_command(git_config: &git2::Config) -> Option<PathBuf> {
 	if let Some(command) = std::env::var_os("GIT_ASKPASS") {
 		Some(command.into())
 	} else if let Ok(command) = git_config.get_path("core.askPass") {
-		return Some(command)
+		Some(command)
 	} else if let Some(command) = std::env::var_os("SSH_ASKPASS") {
-		return Some(command.into());
+		Some(command.into())
 	} else {
 		None
 	}
